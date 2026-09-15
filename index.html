@@ -174,22 +174,115 @@ function validateStateStructure(data) {
   return true;
 }
 
+function normalizeTeacherAvailability(availability) {
+  const defaults = generateDefaultAvailability();
+  const source = (availability && typeof availability === 'object') ? availability : {};
+  const normalized = {};
+  for (let d = 0; d < 6; d++) {
+    const row = Array.isArray(source[d]) ? source[d] : [];
+    normalized[d] = Array.from({ length: MAX_PERIODS }, (_, p) => row[p] !== false);
+  }
+  return normalized;
+}
+
+function normalizeStateData() {
+  if (!state || typeof state !== 'object') state = {};
+  if (!state.settings || typeof state.settings !== 'object') state.settings = { schoolName: 'نام مدرسه' };
+  if (!Array.isArray(state.gradeLevels) || state.gradeLevels.length === 0) state.gradeLevels = [...initialGradeLevels];
+  if (!Array.isArray(state.subjects)) state.subjects = [];
+  if (!Array.isArray(state.teachers)) state.teachers = [];
+  if (!Array.isArray(state.classes)) state.classes = [];
+  if (!Array.isArray(state.sharedGroups)) state.sharedGroups = [];
+  if (!state.schedules || typeof state.schedules !== 'object') state.schedules = {};
+
+  state.settings.schoolName = typeof state.settings.schoolName === 'string' && state.settings.schoolName.trim()
+    ? state.settings.schoolName.slice(0, 100) : 'نام مدرسه';
+
+  state.subjects.forEach(s => {
+    if (!s || typeof s !== 'object') return;
+    if (!s.id) s.id = generateId();
+    if (!s.createdAt) s.createdAt = Date.now();
+    if (typeof s.name !== 'string') s.name = String(s.name || '');
+    if (typeof s.grade !== 'string') s.grade = String(s.grade || '');
+    if (typeof s.major !== 'string' || !majorsList.includes(s.major)) s.major = 'عمومی';
+    ensureSubjectSchedulingFields(s);
+  });
+
+  state.teachers = state.teachers.filter(t => t && typeof t === 'object').map(t => {
+    if (!t.id) t.id = generateId();
+    if (!t.createdAt) t.createdAt = Date.now();
+    if (typeof t.name !== 'string') t.name = String(t.name || '');
+    if (!Array.isArray(t.subjects)) t.subjects = [];
+    t.subjects = [...new Set(t.subjects.filter(Boolean))];
+    t.availability = normalizeTeacherAvailability(t.availability);
+    return t;
+  });
+
+  const subjectIds = new Set(state.subjects.map(s => s.id));
+  const teacherIds = new Set(state.teachers.map(t => t.id));
+  state.teachers.forEach(t => { t.subjects = t.subjects.filter(sid => subjectIds.has(sid)); });
+
+  state.classes = state.classes.filter(c => c && typeof c === 'object').map(c => {
+    if (!c.id) c.id = generateId();
+    if (!c.createdAt) c.createdAt = Date.now();
+    if (typeof c.name !== 'string') c.name = String(c.name || '');
+    if (!Array.isArray(c.subjects)) c.subjects = [];
+    c.subjects = c.subjects.filter(cs => cs && typeof cs === 'object' && subjectIds.has(cs.subjectId)).map(cs => {
+      ensureClassSubjectFields(cs);
+      if (cs.teacherId && !teacherIds.has(cs.teacherId)) cs.teacherId = null;
+      cs.periods = clampInt(cs.periods, 1, MAX_PERIODS_PER_SUBJECT, 1);
+      if (cs.type !== 'عادی' && cs.type !== 'تخصصی') cs.type = 'عادی';
+      return cs;
+    });
+    const cfg = c.config && typeof c.config === 'object' ? c.config : {};
+    const rawDays = Array.isArray(cfg.activeDays) ? cfg.activeDays : [0,1,2,3,4];
+    c.config = {
+      activeDays: [...new Set(rawDays.map(Number).filter(d => Number.isInteger(d) && d >= 0 && d < 6))],
+      periodsCount: clampInt(cfg.periodsCount, 1, MAX_PERIODS, 5),
+      periodDuration: clampInt(cfg.periodDuration, 1, MAX_PERIOD_DURATION, 45)
+    };
+    if (c.config.activeDays.length === 0) c.config.activeDays = [0,1,2,3,4];
+    return c;
+  });
+
+  // Keep shared groups internally consistent and remove stale members.
+  const classMap = new Map(state.classes.map(c => [c.id, c]));
+  state.sharedGroups = state.sharedGroups.filter(g => g && typeof g === 'object').map(g => ({
+    ...g,
+    members: Array.isArray(g.members) ? g.members.filter(m => {
+      const c = classMap.get(m?.classId);
+      return !!c?.subjects.some(cs => cs.subjectId === m.subjectId);
+    }) : []
+  })).filter(g => g.members.length >= 2);
+
+  state.sharedGroups.forEach(g => {
+    g.members.forEach(m => {
+      const cs = classMap.get(m.classId)?.subjects.find(x => x.subjectId === m.subjectId);
+      if (cs) {
+        cs.sharedGroupId = g.id;
+        cs.teacherId = g.teacherId || cs.teacherId || null;
+      }
+    });
+  });
+}
+
 function autoAssignTeachers() {
   let changed = false;
+  state.teachers.forEach(t => { if (!Array.isArray(t.subjects)) t.subjects = []; });
   state.classes.forEach(c => {
-      c.subjects.forEach(cs => {
-          if (cs.teacherId && !state.teachers.find(t => t.id === cs.teacherId)) {
-              cs.teacherId = null;
-              changed = true;
-          }
-          if (!cs.teacherId) {
-              const specialized = state.teachers.filter(t => t.subjects.includes(cs.subjectId));
-              if (specialized.length > 0) {
-                  cs.teacherId = specialized[0].id;
-                  changed = true;
-              }
-          }
-      });
+    c.subjects.forEach(cs => {
+      if (cs.teacherId && !state.teachers.some(t => t.id === cs.teacherId)) {
+        cs.teacherId = null;
+        changed = true;
+      }
+      if (!cs.teacherId) {
+        const specialized = state.teachers.filter(t => t.subjects.includes(cs.subjectId));
+        if (specialized.length > 0) {
+          cs.teacherId = specialized[0].id;
+          changed = true;
+        }
+      }
+    });
   });
   return changed;
 }
@@ -215,39 +308,7 @@ function loadState() {
     }
   }
 
-  if (!state.gradeLevels) state.gradeLevels = [...initialGradeLevels];
-  if (!state.subjects) state.subjects = [];
-  if (!state.teachers) state.teachers = [];
-  if (!state.classes) state.classes = [];
-  if (!state.settings) state.settings = { schoolName: 'نام مدرسه' };
-  if (!state.schedules) state.schedules = {};
-
-  // Sanitize: ensure all names are strings
-  state.subjects.forEach(s => {
-    if(!s.createdAt) s.createdAt = Date.now();
-    if(typeof s.name !== 'string') s.name = String(s.name || '');
-    if(typeof s.grade !== 'string') s.grade = String(s.grade || '');
-    if(typeof s.major !== 'string') s.major = String(s.major || 'عمومی');
-    ensureSubjectSchedulingFields(s); // FIX (زمان‌بند): دشواری و زمان ترجیحی
-  });
-  state.teachers.forEach(t => {
-      if(!t.createdAt) t.createdAt = Date.now();
-      if(typeof t.name !== 'string') t.name = String(t.name || '');
-      if(!t.availability || t.availability.length < MAX_PERIODS) t.availability = generateDefaultAvailability();
-  });
-  state.classes.forEach(c => {
-      if(!c.createdAt) c.createdAt = Date.now();
-      if(typeof c.name !== 'string') c.name = String(c.name || '');
-      if(!Array.isArray(c.subjects)) c.subjects = [];
-      c.subjects.forEach(cs => { if(cs) ensureClassSubjectFields(cs); }); // FIX (زمان‌بند): زنگ پیوسته
-      // FIX: Validate config — ensure numeric values are within bounds
-      if(!c.config) c.config = { activeDays: [0,1,2,3,4], periodsCount: 5, periodDuration: 45 };
-      if(!Array.isArray(c.config.activeDays) || c.config.activeDays.length === 0) c.config.activeDays = [0,1,2,3,4];
-      if(typeof c.config.periodsCount !== 'number' || c.config.periodsCount < 1 || c.config.periodsCount > MAX_PERIODS) c.config.periodsCount = 5;
-      if(typeof c.config.periodDuration !== 'number' || c.config.periodDuration < 1 || c.config.periodDuration > MAX_PERIOD_DURATION) c.config.periodDuration = 45;
-  });
-
-  if (typeof state.settings.schoolName !== 'string') state.settings.schoolName = 'نام مدرسه';
+  normalizeStateData();
 
   autoAssignTeachers();
   saveState();
@@ -262,7 +323,7 @@ function saveState() {
   }
 }
 
-function generateId() { return '_' + Math.random().toString(36).substr(2, 9); }
+function generateId() { return (typeof crypto !== 'undefined' && crypto.randomUUID) ? '_' + crypto.randomUUID() : '_' + Math.random().toString(36).slice(2, 11) + Date.now().toString(36); }
 function generateDefaultAvailability() {
     let avail = {};
     for(let d=0; d<6; d++) avail[d] = new Array(MAX_PERIODS).fill(true);
@@ -1423,7 +1484,7 @@ function addSubjectToClass(classId) {
 }
 
 
-function deleteSharedGroup(groupId, returnClassId = '') {
+function deleteSharedGroup(groupId) {
   if (!confirm('آیا از حذف گروه برگزاری مشترک اطمینان دارید؟')) return;
   const group = (state.sharedGroups || []).find(g => g.id === groupId);
   if (group) {
@@ -1435,9 +1496,7 @@ function deleteSharedGroup(groupId, returnClassId = '') {
   }
   state.sharedGroups = (state.sharedGroups || []).filter(g => g.id !== groupId);
   saveState();
-  // FIX (باگ): قبلاً همیشه به لیست کلاس‌ها می‌رفت؛ حالا در صورت وجود، به همان صفحهٔ ویرایش کلاس برمی‌گردد.
-  const cls = returnClassId && state.classes.find(c => c.id === returnClassId);
-  navigateTo(cls ? `class_edit_${returnClassId}` : 'classes');
+  navigateTo('classes');
   showToast('گروه برگزاری مشترک حذف شد.', 'success');
 }
 
@@ -1500,7 +1559,7 @@ function openSharedLessonModal(classId, subIndex = null) {
     </div>`;
 
   const footer = `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 rounded-xl">انصراف</button>
-    ${currentGroup ? `<button onclick="deleteSharedGroup('${escapeHtml(currentGroup.id)}', '${escapeHtml(classId)}'); hideModal();" class="px-4 py-2 bg-red-50 text-red-600 rounded-xl">حذف گروه</button>` : ''}
+    ${currentGroup ? `<button onclick="deleteSharedGroup('${escapeHtml(currentGroup.id)}'); hideModal();" class="px-4 py-2 bg-red-50 text-red-600 rounded-xl">حذف گروه</button>` : ''}
     <button onclick="saveSharedLessonGroup('${escapeHtml(classId)}','${escapeHtml(currentSub?.subjectId || '')}','${escapeHtml(currentGroup?.id || '')}')" class="px-5 py-2 bg-violet-600 text-white rounded-xl">ذخیره برگزاری مشترک</button>`;
   showModal('تنظیم برگزاری مشترک', body, footer);
 }
@@ -1684,11 +1743,10 @@ const SCHEDULER_PENALTIES = {
   sameSubjectAdjacent: 10    // تکرار همان درس در دو زنگ پشت‌سرهم (برای دروس غیرپیوسته)
 };
 
-let activeSchedulerRun = null; // جلوگیری از اجرای همزمان دو زمان‌بندی
+let activeSchedulerRun = false; // وضعیت اجرای زمان‌بندی
 
 function runSmartScheduler() {
   if (activeSchedulerRun) return showToast('زمان‌بندی دیگری در حال اجراست؛ چند لحظه صبر کنید.', 'info');
-  // FIX (باگ): این متغیر قفل هرگز true نمی‌شد، بنابراین اجرای هم‌زمان دوباره را واقعاً مسدود نمی‌کرد.
   activeSchedulerRun = true;
 
   window.lastScheduleDiagnostics = { impossible: [] };
@@ -1801,7 +1859,7 @@ function runSmartScheduler() {
     const el = document.getElementById('schedule-results');
     if (el) el.innerHTML = renderScheduleTables();
     if (runBtn) { runBtn.disabled = false; runBtn.innerText = 'اجرای زمان‌بندی هوشمند'; }
-    activeSchedulerRun = null;
+    activeSchedulerRun = false;
     showToast('هیچ درسی برای زمان‌بندی وجود ندارد.', 'info');
     return;
   }
@@ -2108,7 +2166,7 @@ function runSmartScheduler() {
         if(l.preferredSlot==='end' && p!==meta.pCount-1) score+=SCHEDULER_PENALTIES.preferredSlot;
         const row=sched[cid][d];
         if(p+1<meta.pCount && row[p+1]) {
-          if(l.difficulty>=HEAVY_SUBJECT_THRESHOLD && row[p+1].difficulty>=HEAVY_SUBJECT_THRESHOLD) score+=SCHEDULER_PENALTIES.heavyBackToBack;
+          if(l.unitId !== row[p+1].unitId && l.difficulty>=HEAVY_SUBJECT_THRESHOLD && row[p+1].difficulty>=HEAVY_SUBJECT_THRESHOLD) score+=SCHEDULER_PENALTIES.heavyBackToBack;
           if(l.subjectId===row[p+1].subjectId && !l.isDouble) score+=SCHEDULER_PENALTIES.sameSubjectAdjacent;
         }
       }
@@ -2176,7 +2234,7 @@ function runSmartScheduler() {
   saveState();
   const resultsEl=document.getElementById('schedule-results'); if(resultsEl) resultsEl.innerHTML=renderScheduleTables();
   if(runBtn){runBtn.disabled=false;runBtn.innerText='اجرای زمان‌بندی هوشمند';}
-  activeSchedulerRun=null;
+  activeSchedulerRun=false;
 
   window.lastScheduleDiagnostics = {
     impossible: [...diagnostics, ...finalUnplaced].filter((v,i,a)=> a.findIndex(x=>`${x.grade}|${x.className}|${x.subjectName}|${x.teacherName}`===`${v.grade}|${v.className}|${v.subjectName}|${v.teacherName}`)===i),
@@ -2264,11 +2322,20 @@ function exportSchedule(type) {
     }
     else if(type === 'excel') {
         const wb = XLSX.utils.book_new();
+        const usedSheetNames = new Set();
         state.classes.forEach(cls => {
             const table = document.getElementById(`table_${cls.id}`);
             if(table) {
                 const ws = XLSX.utils.table_to_sheet(table);
-                XLSX.utils.book_append_sheet(wb, ws, cls.name.substring(0,30));
+                let base = String(cls.name || 'کلاس').replace(/[\\\/:*?\[\]]/g, ' ').trim().slice(0, 31) || 'کلاس';
+                let sheetName = base;
+                let n = 2;
+                while (usedSheetNames.has(sheetName)) {
+                    const suffix = ` (${n++})`;
+                    sheetName = (base.slice(0, 31 - suffix.length) + suffix).slice(0, 31);
+                }
+                usedSheetNames.add(sheetName);
+                XLSX.utils.book_append_sheet(wb, ws, sheetName);
             }
         });
         XLSX.writeFile(wb, "schedules.xlsx");
@@ -2332,17 +2399,8 @@ function importData(e) {
     try {
       const data = JSON.parse(ev.target.result);
       if(validateStateStructure(data)) {
-         Object.assign(state, data);
-         // Sanitize imported data (+ فیلدهای زمان‌بندی جدید)
-         state.subjects.forEach(s => { if(typeof s.name !== 'string') s.name = String(s.name || ''); ensureSubjectSchedulingFields(s); });
-         state.teachers.forEach(t => { if(typeof t.name !== 'string') t.name = String(t.name || ''); if(!t.availability || t.availability.length < MAX_PERIODS) t.availability = generateDefaultAvailability(); });
-         state.classes.forEach(c => {
-            if(typeof c.name !== 'string') c.name = String(c.name || '');
-            if(!Array.isArray(c.subjects)) c.subjects = [];
-            c.subjects.forEach(cs => { if(cs) ensureClassSubjectFields(cs); });
-         });
-         if(!Array.isArray(state.sharedGroups)) state.sharedGroups = [];
-         if(typeof state.settings.schoolName !== 'string') state.settings.schoolName = 'نام مدرسه';
+         state = data;
+         normalizeStateData();
          autoAssignTeachers();
          saveState();
          navigateTo('settings');
@@ -2368,6 +2426,9 @@ function resetAllData() {
 // --- INIT ---
 window.onload = () => {
   loadState();
+  normalizeStateData();
+  autoAssignTeachers();
+  saveState();
   navigateTo('home');
 };
 </script>
