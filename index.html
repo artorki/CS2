@@ -1895,19 +1895,19 @@ function runSmartScheduler() {
     const members = u.members;
     if (u.teacherId) {
       const days = stats.teacherDays[u.teacherId] || new Set();
-      score += (days.has(d) ? -220 : 260); // روز جدید برای استاد گران است
+      score += (days.has(d) ? -520 : 520); // ترجیح قوی برای متمرکز کردن کلاس‌های استاد در یک روز
       const periods = stats.teacherBusy[u.teacherId]?.[d] || new Set();
       if (periods.size) {
         const near = [...periods].some(pp => Math.abs(pp-p)===1);
-        score += near ? -120 : 160;
+        score += near ? -260 : 320;
       }
     }
     members.forEach(m => {
       const days = stats.classDays[m.classId] || new Set();
-      score += days.has(d) ? -120 : 180; // روز جدید برای کلاس نیز نامطلوب است
+      score += days.has(d) ? -180 : 260; // روز جدید برای کلاس نیز نامطلوب است
       const row = sched[m.classId][d];
       const neighbors = [(p>0?row[p-1]:null),(p<MAX_PERIODS-1?row[p+1]:null)];
-      if (neighbors.some(n=>n)) score -= 40;
+      if (neighbors.some(n=>n)) score -= 90;
       const info = subjectInfo(m.classId,m.subjectId);
       const sub=info.sub;
       const preferred=sub?.preferredSlot || 'any';
@@ -1927,20 +1927,149 @@ function runSmartScheduler() {
     return score + Math.random()*35;
   }
 
+  // ساخت اولیه با «پر کردن حداکثری» و تعمیر زنجیره‌ای.
+  // هدف این است که یک انتخاب حریصانه باعث از دست رفتن زنگ مجازی برای واحد دیگری نشود.
   function randomConstruct() {
     const sched = cloneSchedule(schedTemplate);
-    const teacherBusy={};
-    const placements={};
-    const unplaced=[];
-    const ordered = shuffle(units.filter(u=>u.eligible.length>0).slice()).sort((a,b)=> (a.eligible.length-b.eligible.length) || (b.members.length-a.members.length));
+    const teacherBusy = {};
+    const placements = {};
+    const unplaced = [];
+    const placedUnits = new Set();
+
+    const refreshBusy = () => {
+      Object.keys(teacherBusy).forEach(tid => delete teacherBusy[tid]);
+      allClassIds.forEach(cid => {
+        for (let d=0; d<6; d++) for (let p=0; p<MAX_PERIODS; p++) {
+          const l = sched[cid][d][p];
+          if (!l?.teacherId) continue;
+          if (!teacherBusy[l.teacherId]) teacherBusy[l.teacherId]=Array.from({length:6},()=>new Array(MAX_PERIODS).fill(false));
+          teacherBusy[l.teacherId][d][p]=true;
+        }
+      });
+    };
+
+    const removeUnit = (u) => {
+      const old = placements[u.id];
+      if (!old) return false;
+      const [od,op] = old;
+      const len=u.length||1;
+      u.members.forEach(m => {
+        for(let k=0;k<len;k++) sched[m.classId][od][op+k]=null;
+      });
+      delete placements[u.id];
+      placedUnits.delete(u.id);
+      refreshBusy();
+      return true;
+    };
+
+    const tryPlace = (u, d, p) => {
+      if (!canPlace(u,d,p,sched,teacherBusy)) return false;
+      placeUnit(u,d,p,sched,teacherBusy,placements);
+      placedUnits.add(u.id);
+      return true;
+    };
+
+    // تلاش برای جابه‌جایی زنجیره‌ای: اگر جای هدف اشغال باشد، تا عمق محدود واحد
+    // مزاحم را به یک جای قانونی دیگر منتقل می‌کنیم. این کار ظرفیت واقعی را بهتر پر می‌کند.
+    const relocateFor = (target, d, p, depth, seen) => {
+      if (depth > 3) return false;
+      const blockers = new Map();
+      for (const m of target.members) {
+        for (let k=0;k<(target.length||1);k++) {
+          const pp=p+k;
+          const cell=sched[m.classId][d][pp];
+          if (cell?.unitId) {
+            const bu = units.find(x=>x.id===cell.unitId);
+            if (bu) blockers.set(bu.id, bu);
+          }
+        }
+      }
+      if (target.teacherId) {
+        for (const cid of allClassIds) for (let dd=0;dd<6;dd++) for(let pp=0;pp<MAX_PERIODS;pp++) {
+          if (!isTeacherBusy(teacherBusy,target.teacherId,dd,pp)) continue;
+          const cell=sched[cid][dd][pp];
+          if (cell?.unitId) {
+            const bu=units.find(x=>x.id===cell.unitId);
+            if(bu) blockers.set(bu.id,bu);
+          }
+        }
+      }
+      if (blockers.size===0) return false;
+      if ([...blockers.keys()].some(id=>seen.has(id))) return false;
+
+      for (const blocker of blockers.values()) {
+        seen.add(blocker.id);
+        const old = placements[blocker.id];
+        if (!old) { seen.delete(blocker.id); continue; }
+        const oldD=old[0], oldP=old[1];
+        removeUnit(blocker);
+
+        const candidates = shuffle(blocker.eligible.slice()).sort((a,b)=>{
+          const ac = canPlace(blocker,a[0],a[1],sched,teacherBusy) ? 0 : 1;
+          const bc = canPlace(blocker,b[0],b[1],sched,teacherBusy) ? 0 : 1;
+          return ac-bc;
+        });
+
+        let moved=false;
+        for (const [bd,bp] of candidates) {
+          if (bd===oldD && bp===oldP) continue;
+          if (tryPlace(blocker,bd,bp)) { moved=true; break; }
+          // اگر جای blocker اشغال بود، یک لایهٔ دیگر تعمیر کن.
+          if (relocateFor(blocker,bd,bp,depth+1,seen) && tryPlace(blocker,bd,bp)) { moved=true; break; }
+        }
+        if (moved) {
+          seen.delete(blocker.id);
+          if (canPlace(target,d,p,sched,teacherBusy)) return tryPlace(target,d,p);
+        }
+
+        // اگر جابه‌جایی blocker موفق نشد، آن را به جای قبلی برگردان.
+        if (!placements[blocker.id]) tryPlace(blocker,oldD,oldP);
+        seen.delete(blocker.id);
+      }
+      return false;
+    };
+
+    // واحدهای بدون جای کافی زودتر تعیین تکلیف می‌شوند؛ گروه‌های مشترک و زنگ‌های دوتایی نیز مقدم‌اند.
+    const ordered = units.filter(u=>u.eligible.length>0).slice().sort((a,b)=>{
+      const aHard=(a.members.length>1? -100:0)+(a.length>1?-80:0);
+      const bHard=(b.members.length>1? -100:0)+(b.length>1?-80:0);
+      return (a.eligible.length+aHard)-(b.eligible.length+bHard);
+    });
+
     for (const u of ordered) {
-      const candidates = u.eligible.filter(([d,p]) => canPlace(u,d,p,sched,teacherBusy));
-      if (!candidates.length) { unplaced.push(u); continue; }
       const stats=buildStats(sched);
-      const ranked=candidates.map(slot=>({slot,score:scoreCandidate(u,slot[0],slot[1],sched,stats)})).sort((a,b)=>a.score-b.score);
-      const choice = ranked[Math.floor(Math.random()*Math.min(4,ranked.length))].slot;
-      placeUnit(u,choice[0],choice[1],sched,teacherBusy,placements);
+      const candidates = shuffle(u.eligible.slice()).sort((a,b)=>scoreCandidate(u,a[0],a[1],sched,stats)-scoreCandidate(u,b[0],b[1],sched,stats));
+      let placed=false;
+      // ابتدا چند گزینه برتر، سپس کل گزینه‌های باقی‌مانده با تعمیر زنجیره‌ای.
+      const firstPass=candidates.slice(0,Math.min(12,candidates.length));
+      const secondPass=candidates.slice(Math.min(12,candidates.length));
+      for (const [d,p] of firstPass) {
+        if (tryPlace(u,d,p)) { placed=true; break; }
+        if (relocateFor(u,d,p,0,new Set([u.id]))) { placed=true; break; }
+      }
+      if (!placed) {
+        for (const [d,p] of secondPass) {
+          if (tryPlace(u,d,p)) { placed=true; break; }
+          if (relocateFor(u,d,p,0,new Set([u.id]))) { placed=true; break; }
+        }
+      }
+      if (!placed) unplaced.push(u);
     }
+
+    // تلاش نهایی: واحدهای باقی‌مانده را دوباره در برنامه‌ای که تا اینجا ساخته شده جای بده.
+    for (let pass=0; pass<2 && unplaced.length; pass++) {
+      const remaining=unplaced.splice(0);
+      for (const u of remaining) {
+        let placed=false;
+        const candidates=shuffle(u.eligible.slice());
+        for (const [d,p] of candidates) {
+          if (tryPlace(u,d,p)) { placed=true; break; }
+          if (relocateFor(u,d,p,0,new Set([u.id]))) { placed=true; break; }
+        }
+        if (!placed) unplaced.push(u);
+      }
+    }
+
     return {sched,placements,unplaced};
   }
 
@@ -2050,8 +2179,12 @@ function runSmartScheduler() {
     objective: objective(finalSched)
   };
   const count=window.lastScheduleDiagnostics.impossible.length;
-  if(count===0) showToast('برنامه با رعایت زمان‌های آزاد اساتید و اولویت فشردگی روزانه ساخته شد.', 'success');
-  else showToast(`برنامه ساخته شد؛ ${count} مورد به دلیل محدودیت‌های واقعی یا کمبود ظرفیت حل نشده باقی ماند.`, 'error');
+  if(count===0) showToast('برنامه با رعایت زمان‌های آزاد اساتید و با حداقل زنگ خالی ساخته شد.', 'success');
+  else {
+    const totalUnits = units.length;
+    const placedUnits = totalUnits - finalUnplaced.length;
+    showToast(`برنامه ساخته شد؛ ${placedUnits} مورد از ${totalUnits} واحد درسی قرار گرفت و ${count} مورد به دلیل محدودیت واقعی باقی ماند.`, 'error');
+  }
 }
 
 function renderScheduleTables() {
