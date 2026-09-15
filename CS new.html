@@ -1,0 +1,2270 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سامانه هوشمند برنامه‌ریزی هفتگی مدارس</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { font-family: 'Vazirmatn', system-ui, sans-serif; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  .fade-in { animation: fadeIn .25s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px); border: 1px solid rgba(226, 232, 240, 0.8); }
+  .ts-control { border-radius: 0.5rem; border-color: #cbd5e1; padding: 0.5rem 0.75rem; font-family: inherit; }
+  .ts-control.focus { border-color: #4f46e5; box-shadow: 0 0 0 1px #4f46e5; }
+  .ts-dropdown { text-align: right; border-radius: 0.5rem; font-family: inherit; z-index: 1000; }
+  .cell-selected { ring: 3px solid #4f46e5 !important; background-color: #e0e7ff !important; }
+  .cell-swappable { cursor: pointer; transition: all 0.15s ease; }
+  .cell-swappable:hover { filter: brightness(0.96); transform: scale(0.99); }
+  @media print {
+    body { background: white !important; color: black !important; padding-bottom: 0 !important; }
+    .no-print { display: none !important; }
+    .page-break { page-break-after: always; }
+  }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen pb-20">
+
+  <div id="toast-container" class="fixed top-4 left-4 z-[70] flex flex-col gap-2"></div>
+
+  <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-40 no-print">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center gap-3 cursor-pointer" onclick="navigateTo('home')">
+        <div class="p-2 bg-indigo-800 rounded-xl">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-indigo-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight" id="header-school-name">سامانه هوشمند برنامه کلاسی مدارس</h1>
+          <span class="text-[11px] text-indigo-200 font-normal">نسخه جامع الگوریتمیک پداگوژیک و متعادل‌سازی ذهنی</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="navigateTo('scheduler')" class="bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-3.5 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1.5 shadow-sm">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          تولید هوشمند برنامه
+        </button>
+        <button onclick="navigateTo('home')" class="hover:bg-indigo-600 px-3 py-1.5 rounded-lg transition-colors text-sm font-medium flex items-center gap-1">
+          خانه
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-8" id="app-content"></main>
+
+  <div id="modal-backdrop" class="fixed inset-0 bg-black/50 hidden z-50 overflow-y-auto justify-center p-4 sm:p-6 fade-in items-start sm:items-center">
+    <div id="modal-content" class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col my-auto max-h-[92vh] overflow-hidden"></div>
+  </div>
+
+<script>
+const initialGradeLevels = ['اول', 'دوم', 'سوم', 'چهارم', 'پنجم', 'ششم', 'هفتم', 'هشتم', 'نهم', 'دهم', 'یازدهم', 'دوازدهم'];
+const majorsList = ['عمومی', 'ریاضی فیزیک', 'علوم تجربی', 'علوم انسانی', 'فنی و حرفه‌ای'];
+const DAYS_OF_WEEK = ['شنبه', 'یک‌شنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
+const MAX_PERIODS = 8;
+const MAX_PERIODS_PER_SUBJECT = 12;
+const MAX_PERIOD_DURATION = 120;
+
+let state = {
+  settings: { schoolName: 'دبیرستان نمونه هوشمند' },
+  gradeLevels: [...initialGradeLevels],
+  subjects: [],
+  teachers: [],
+  classes: [],
+  schedules: {}
+};
+
+let uiState = {
+  sortRules: { subjects: 'date', teachers: 'date', classes: 'date' },
+  teacherViewMode: 'grid',
+  scheduleTab: 'classes',
+  selectedCell: null,
+  activeTomSelects: []
+};
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function safeParseInt(val, fallback) {
+  const n = parseInt(val, 10);
+  return (isNaN(n) || n < 0) ? fallback : n;
+}
+
+function clampInt(val, min, max, fallback) {
+  const n = parseInt(val, 10);
+  if (isNaN(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function generateId() { return '_' + Math.random().toString(36).substr(2, 9); }
+
+function isValidAvailability(avail) {
+  if (!avail || typeof avail !== 'object') return false;
+  for (let d = 0; d < 6; d++) {
+    if (!Array.isArray(avail[d]) || avail[d].length < MAX_PERIODS) return false;
+  }
+  return true;
+}
+
+function generateDefaultAvailability() {
+  let avail = {};
+  for (let d = 0; d < 6; d++) avail[d] = new Array(MAX_PERIODS).fill(true);
+  return avail;
+}
+
+const SUBJECT_DIFFICULTY_LEVELS = [
+  { value: 1, label: '۱ — خیلی سبک (ورزش، پرورشی، تفکر)' },
+  { value: 2, label: '۲ — سبک (هنر، کارگاه، مهارت)' },
+  { value: 3, label: '۳ — متوسط (ادبیات، زبان، دین و زندگی)' },
+  { value: 4, label: '۴ — سنگین (زیست‌شناسی، شیمی، عربی)' },
+  { value: 5, label: '۵ — بسیار سنگین (ریاضی، فیزیک، حسابان، هندسه)' }
+];
+
+const SUBJECT_PREFERRED_SLOTS = [
+  { value: 'any', label: 'بدون ترجیح خاص (هر زنگی)' },
+  { value: 'morning', label: 'صبح زود (زنگ ۱ و ۲ — دروس نیازمند تمرکز بالا)' },
+  { value: 'end', label: 'آخر روز (زنگ‌های پایانی — دروس عملی/ورزشی)' }
+];
+
+function ensureSubjectSchedulingFields(s) {
+  if (typeof s.difficulty !== 'number' || s.difficulty < 1 || s.difficulty > 5) s.difficulty = 3;
+  if (!['morning', 'end', 'any'].includes(s.preferredSlot)) {
+    s.preferredSlot = /تربیت\s*بدنی|هنر|کار\s*و\s*فناوری|ورزش|سواد\s*رسانه‌ای/.test(s.name || '') ? 'end' : 'any';
+  }
+}
+
+function ensureClassSubjectFields(cs) {
+  if (typeof cs.doublePeriod !== 'boolean') cs.doublePeriod = false;
+  if (typeof cs.periods !== 'number' || cs.periods < 1) cs.periods = 2;
+}
+
+function getClassCapacity(cls) {
+  const activeDays = cls.config?.activeDays ||;
+  const periodsCount = cls.config?.periodsCount || 5;
+  return activeDays.length * periodsCount;
+}
+
+function getClassUsedSlots(cls) {
+  return (cls.subjects || []).reduce((sum, cs) => sum + (cs.periods || 0), 0);
+}
+
+function validateStateStructure(data) {
+  if (!data || typeof data !== 'object') return false;
+  if (!Array.isArray(data.subjects)) return false;
+  if (!Array.isArray(data.teachers)) return false;
+  if (!Array.isArray(data.classes)) return false;
+  if (!data.settings || typeof data.settings !== 'object') return false;
+  return true;
+}
+
+function loadState() {
+  const saved = localStorage.getItem('school_schedule_data_v2');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (validateStateStructure(parsed)) {
+        state = parsed;
+      }
+    } catch(e) {
+      console.error('State load error:', e);
+      showToast('خطا در خواندن داده‌های ذخیره‌شده؛ از مقادیر پیش‌فرض استفاده شد.', 'error');
+    }
+  }
+
+  if (!state.gradeLevels) state.gradeLevels = [...initialGradeLevels];
+  if (!state.subjects) state.subjects = [];
+  if (!state.teachers) state.teachers = [];
+  if (!state.classes) state.classes = [];
+  if (!state.settings) state.settings = { schoolName: 'دبیرستان نمونه هوشمند' };
+  if (!state.schedules) state.schedules = {};
+
+  state.subjects.forEach(s => {
+    if (!s.createdAt) s.createdAt = Date.now();
+    ensureSubjectSchedulingFields(s);
+  });
+
+  state.teachers.forEach(t => {
+    if (!t.createdAt) t.createdAt = Date.now();
+    if (!isValidAvailability(t.availability)) t.availability = generateDefaultAvailability();
+    if (typeof t.maxDailyPeriods !== 'number') t.maxDailyPeriods = 5;
+  });
+
+  state.classes.forEach(c => {
+    if (!c.createdAt) c.createdAt = Date.now();
+    if (!Array.isArray(c.subjects)) c.subjects = [];
+    c.subjects.forEach(cs => { if (cs) ensureClassSubjectFields(cs); });
+    if (!c.config) c.config = { activeDays:, periodsCount: 5, periodDuration: 45 };
+    if (!Array.isArray(c.config.activeDays) || c.config.activeDays.length === 0) c.config.activeDays =;
+  });
+
+  const headerEl = document.getElementById('header-school-name');
+  if (headerEl) headerEl.innerText = state.settings.schoolName || 'سامانه هوشمند برنامه کلاسی مدارس';
+  saveState();
+}
+
+function saveState() {
+  try {
+    localStorage.setItem('school_schedule_data_v2', JSON.stringify(state));
+    const headerEl = document.getElementById('header-school-name');
+    if (headerEl && state.settings.schoolName) headerEl.innerText = state.settings.schoolName;
+  } catch(e) {
+    console.error('Failed to save state:', e);
+    showToast('خطا در ذخیره‌سازی داده‌ها. حافظه محلی مرورگر ممکن است پر باشد.', 'error');
+  }
+}
+
+function showToast(msg, type = 'info') {
+  const colors = { success: 'bg-emerald-600', error: 'bg-rose-600', info: 'bg-indigo-600', warning: 'bg-amber-600' };
+  const toast = document.createElement('div');
+  toast.className = `${colors[type] || colors.info} text-white px-4 py-2.5 rounded-xl shadow-xl text-sm font-medium fade-in max-w-md border border-white/20`;
+  toast.textContent = msg;
+  const container = document.getElementById('toast-container');
+  if (container) container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.transition = 'opacity .3s ease';
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
+const modalBackdrop = document.getElementById('modal-backdrop');
+const modalContent = document.getElementById('modal-content');
+
+modalBackdrop.addEventListener('click', (e) => {
+  if (e.target === modalBackdrop) hideModal();
+});
+
+function showModal(title, bodyHTML, footerHTML, onOpen = null) {
+  modalContent.innerHTML = `
+    <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl shrink-0">
+      <h3 class="font-bold text-lg text-slate-800">${escapeHtml(title)}</h3>
+      <button onclick="hideModal()" class="text-slate-400 hover:text-rose-500 transition-colors p-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+    <div class="px-6 py-6 flex-1 overflow-y-auto custom-scrollbar">${bodyHTML}</div>
+    <div class="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50 rounded-b-2xl shrink-0">${footerHTML}</div>
+  `;
+  modalBackdrop.classList.remove('hidden');
+  modalBackdrop.classList.add('flex');
+  setTimeout(() => {
+    initSearchableSelects();
+    if(onOpen) onOpen();
+  }, 50);
+}
+
+function hideModal() {
+  modalBackdrop.classList.add('hidden');
+  modalBackdrop.classList.remove('flex');
+  destroyAllTomSelects();
+}
+
+function destroyAllTomSelects() {
+  uiState.activeTomSelects.forEach(ts => {
+    try { if (ts && typeof ts.destroy === 'function') ts.destroy(); } catch(e){}
+  });
+  uiState.activeTomSelects = [];
+}
+
+function initSearchableSelects() {
+  destroyAllTomSelects();
+  document.querySelectorAll('select.searchable').forEach(el => {
+    if (!el.tomselect) {
+      const ts = new TomSelect(el, {
+        plugins: ['remove_button'],
+        create: false,
+        sortField: { field: "text", direction: "asc" },
+        placeholder: el.getAttribute('placeholder') || 'جستجو و انتخاب...',
+        render: { no_results: function() { return '<div class="p-2 text-sm text-slate-400 text-center">موردی یافت نشد</div>'; } }
+      });
+      uiState.activeTomSelects.push(ts);
+    }
+  });
+}
+
+function navigateTo(view) {
+  destroyAllTomSelects();
+  uiState.selectedCell = null;
+  const content = document.getElementById('app-content');
+  content.innerHTML = '';
+
+  if (view === 'home') content.innerHTML = renderHome();
+  else if (view === 'settings') content.innerHTML = renderSettings();
+  else if (view === 'teachers') content.innerHTML = renderTeachers();
+  else if (view === 'classes') content.innerHTML = renderClasses();
+  else if (view === 'subjects') content.innerHTML = renderSubjects();
+  else if (view === 'scheduler') content.innerHTML = renderScheduler();
+  else if (view.startsWith('class_edit_')) {
+    const classId = view.replace('class_edit_', '');
+    content.innerHTML = renderClassEditor(classId);
+  }
+
+  setTimeout(() => initSearchableSelects(), 50);
+}
+
+function sortDataList(list, type) {
+  return [...list].sort((a, b) => {
+    if (type === 'alpha') return (a.name || '').localeCompare(b.name || '', 'fa');
+    return (b.createdAt || 0) - (a.createdAt || 0);
+  });
+}
+
+function renderSortToggle(section, currentSort) {
+  return `
+    <select onchange="changeSort('${escapeHtml(section)}', this.value)" class="searchable text-sm border-slate-300 rounded-lg pr-8 bg-white" placeholder="مرتب‌سازی...">
+      <option value="date" ${currentSort === 'date' ? 'selected' : ''}>مرتب‌سازی: جدیدترین</option>
+      <option value="alpha" ${currentSort === 'alpha' ? 'selected' : ''}>مرتب‌سازی: حروف الفبا</option>
+    </select>
+  `;
+}
+
+function changeSort(section, val) {
+  if (val !== 'date' && val !== 'alpha') return;
+  uiState.sortRules[section] = val;
+  navigateTo(section);
+}
+
+function renderHome() {
+  const stats = {
+    classesCount: state.classes.length,
+    teachersCount: state.teachers.length,
+    subjectsCount: state.subjects.length,
+    hasSchedule: Object.keys(state.schedules || {}).length > 0
+  };
+
+  const menus = [
+    { id: 'scheduler', title: 'ساخت و مشاهده برنامه هوشمند', desc: 'تولید خودکار، تنظیمات الگوریتم، خروجی‌های PDF/Excel و چاپ برنامه هفتگی معلمان و کلاس‌ها', icon: 'M13 10V3L4 14h7v7l9-11h-7z', color: 'bg-amber-500', highlight: true },
+    { id: 'classes', title: 'مدیریت کلاس‌ها', desc: `${stats.classesCount} کلاس فعال | تنظیم هفتگی ساعات، دروس تخصصی و دروس مشترک بین رشته‌ها`, icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4', color: 'bg-blue-600' },
+    { id: 'teachers', title: 'مدیریت اساتید و ساعات حضور', desc: `${stats.teachersCount} دبیر و استاد | ماتریس حضور روزانه و زنگ‌های آزاد و دروس تدریسی`, icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', color: 'bg-emerald-600' },
+    { id: 'subjects', title: 'مدیریت دروس و سختی شناختی', desc: `${stats.subjectsCount} درس ثبت‌شده | تنظیم بار ذهنی (۱ تا ۵) و زمان‌بندی بهینه روزانه`, icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', color: 'bg-indigo-600' },
+    { id: 'settings', title: 'تنظیمات و پشتیبان‌گیری', desc: 'تغییر نام آموزشگاه، دریافت فایل پشتیبان JSON و بازیابی کامل اطلاعات', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z', color: 'bg-slate-700' },
+  ];
+
+  let html = `
+    <div class="fade-in space-y-6">
+      <div class="bg-gradient-to-r from-indigo-700 via-indigo-800 to-slate-900 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6">
+        <div class="space-y-2 text-center md:text-right">
+          <span class="inline-block bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-3 py-1 rounded-full text-xs font-semibold tracking-wide">نسخه جامع آموزشی و پداگوژیک</span>
+          <h2 class="text-3xl font-extrabold tracking-tight">${escapeHtml(state.settings.schoolName)}</h2>
+          <p class="text-indigo-200 text-sm max-w-xl leading-relaxed">تنظیم اتوماتیک بدون تداخل، مدیریت تعادل شناختی زنگ‌های صبح و عصر، کاهش ساعات سرگردانی اساتید و هماهنگی کامل دروس آزمایشگاهی و مشترک.</p>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3 shrink-0">
+          <button onclick="navigateTo('scheduler')" class="bg-amber-400 hover:bg-amber-500 text-slate-900 font-extrabold px-6 py-3.5 rounded-2xl shadow-lg transition-all transform hover:-translate-y-0.5 flex items-center gap-2 text-base">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            ورود به بخش زمان‌بندی هوشمند
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+  `;
+
+  menus.forEach(m => {
+    html += `
+      <div onclick="navigateTo('${escapeHtml(m.id)}')" class="glass-card rounded-2xl p-6 cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all group flex flex-col justify-between border border-slate-200 relative overflow-hidden">
+        <div class="flex items-start gap-4 mb-4">
+          <div class="w-14 h-14 rounded-2xl ${m.color} text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${m.icon}" /></svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors">${escapeHtml(m.title)}</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">${escapeHtml(m.desc)}</p>
+          </div>
+        </div>
+        <div class="pt-3 border-t border-slate-100 flex justify-between items-center text-xs font-semibold text-indigo-600">
+          <span>ورود به بخش</span>
+          <svg class="w-4 h-4 transform -rotate-180 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+        </div>
+      </div>
+    `;
+  });
+
+  html += `</div></div>`;
+  return html;
+}
+
+function renderSubjects() {
+  const grouped = {};
+  const sortedData = sortDataList(state.subjects, uiState.sortRules.subjects);
+
+  sortedData.forEach(s => {
+    if (!grouped[s.grade]) grouped[s.grade] = [];
+    grouped[s.grade].push(s);
+  });
+
+  const sortedGrades = state.gradeLevels.filter(g => grouped[g]);
+
+  let html = `
+    <div class="fade-in space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+          <h2 class="text-2xl font-black text-slate-800 border-r-4 border-indigo-600 pr-3">مدیریت دروس و سختی شناختی</h2>
+          <p class="text-xs text-slate-500 mt-1 pr-4">تنظیم سطح دشواری دروس (۱ تا ۵) و زمان ترجیحی تدریس برای تنظیم متوازن کشش ذهنی دانش‌آموزان</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          ${renderSortToggle('subjects', uiState.sortRules.subjects)}
+          <button onclick="openImportSubjectsModal()" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition-colors">
+            ورود از اکسل
+          </button>
+          <button onclick="openAddSubjectModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md transition-colors flex items-center gap-1.5">
+            + افزودن درس جدید
+          </button>
+        </div>
+      </div>
+      <div class="space-y-6">
+  `;
+
+  for (const grade of sortedGrades) {
+    const subs = grouped[grade];
+    const isHighSchool = ['دهم', 'یازدهم', 'دوازدهم'].includes(grade);
+
+    html += `
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="bg-slate-50/80 px-6 py-3 border-b border-slate-200 font-bold text-slate-700 flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-indigo-600 inline-block"></span>
+            پایه ${escapeHtml(grade)}
+            <span class="text-xs font-normal text-slate-400">(${subs.length} درس تعریف‌شده)</span>
+          </div>
+          <button onclick="deleteGrade('${escapeHtml(grade)}')" class="text-xs text-rose-600 hover:bg-rose-50 px-3 py-1 rounded-lg transition-colors font-semibold">حذف کامل پایه</button>
+        </div>
+        <div class="p-6">
+    `;
+
+    const renderBadge = (sub) => {
+      const diffColors = {
+        1: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        2: 'bg-teal-100 text-teal-800 border-teal-200',
+        3: 'bg-blue-100 text-blue-800 border-blue-200',
+        4: 'bg-amber-100 text-amber-800 border-amber-200',
+        5: 'bg-rose-100 text-rose-800 border-rose-200'
+      };
+      const prefLabels = { morning: 'صبح (زنگ‌های اول)', end: 'عصر (زنگ پایانی)', any: 'آزاد' };
+
+      return `
+        <div class="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 pl-1 pr-3 py-1.5 rounded-xl text-sm group mb-2 hover:border-indigo-300 transition-colors">
+          <span class="font-bold text-slate-800 ml-1 cursor-pointer hover:underline" onclick="editSubjectName('${escapeHtml(sub.id)}')">${escapeHtml(sub.name)}</span>
+          <span class="text-[10px] px-2 py-0.5 rounded-md border ${diffColors[sub.difficulty] || 'bg-slate-100 text-slate-700'} font-semibold" title="سطح دشواری (۱ سبک - ۵ خیلی سنگین)">دشواری ${sub.difficulty}</span>
+          ${sub.preferredSlot !== 'any' ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">${escapeHtml(prefLabels[sub.preferredSlot])}</span>` : ''}
+          <button onclick="editSubjectName('${escapeHtml(sub.id)}')" class="text-slate-400 hover:text-indigo-600 p-1 opacity-60 group-hover:opacity-100 transition-opacity"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+          <button onclick="deleteSubject('${escapeHtml(sub.id)}')" class="text-slate-400 hover:text-rose-600 p-1 opacity-60 group-hover:opacity-100 transition-opacity" title="حذف درس"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+        </div>
+      `;
+    };
+
+    if (isHighSchool) {
+      const majorsMap = { 'عمومی': [], 'ریاضی فیزیک': [], 'علوم تجربی': [], 'علوم انسانی': [], 'فنی و حرفه‌ای': [] };
+      subs.forEach(s => {
+        if (!majorsMap[s.major]) majorsMap[s.major] = [];
+        majorsMap[s.major].push(s);
+      });
+
+      html += `<div class="flex flex-col gap-4">`;
+      for (const maj in majorsMap) {
+        if (majorsMap[maj].length > 0) {
+          html += `
+            <div class="border border-slate-100 rounded-xl p-4 relative pt-5 bg-slate-50/40">
+              <span class="absolute -top-3 right-4 text-xs font-bold bg-white text-indigo-700 px-2.5 py-0.5 rounded-lg border border-slate-200">رشته: ${escapeHtml(maj)}</span>
+              <div class="flex flex-wrap gap-2">
+          `;
+          majorsMap[maj].forEach(sub => { html += renderBadge(sub); });
+          html += `</div></div>`;
+        }
+      }
+      html += `</div>`;
+    } else {
+      html += `<div class="flex flex-wrap gap-2">`;
+      subs.forEach(sub => { html += renderBadge(sub); });
+      html += `</div>`;
+    }
+
+    html += `</div></div>`;
+  }
+
+  if (state.subjects.length === 0) {
+    html += `<div class="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">هنوز هیچ درسی ثبت نشده است. روی «افزودن درس جدید» کلیک کنید.</div>`;
+  }
+
+  html += `</div></div>`;
+  return html;
+}
+
+function openAddSubjectModal() {
+  const body = `
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-bold mb-1 text-slate-700">نام درس</label>
+        <input type="text" id="new_sub_name" class="w-full border rounded-xl px-3 py-2 outline-none focus:border-indigo-500" placeholder="مثال: هندسه ۱، فیزیک، آزمایشگاه علوم">
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-bold mb-1 text-slate-700">پایه تحصیلی</label>
+          <select id="new_sub_grade" class="searchable w-full">${state.gradeLevels.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select>
+        </div>
+        <div>
+          <label class="block text-sm font-bold mb-1 text-slate-700">رشته</label>
+          <select id="new_sub_major" class="searchable w-full">${majorsList.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-bold mb-1 text-slate-700">سطح سختی ذهنی (۱ تا ۵)</label>
+          <select id="new_sub_difficulty" class="searchable w-full">
+            ${SUBJECT_DIFFICULTY_LEVELS.map(d => `<option value="${d.value}" ${d.value === 3 ? 'selected' : ''}>${escapeHtml(d.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-bold mb-1 text-slate-700">زمان ترجیحی تدریس</label>
+          <select id="new_sub_preferred" class="searchable w-full">
+            ${SUBJECT_PREFERRED_SLOTS.map(p => `<option value="${p.value}">${escapeHtml(p.label)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>`;
+  showModal('افزودن درس جدید', body, `<button onclick="hideModal()" class="px-4 py-2 bg-slate-100 rounded-xl text-slate-600 font-semibold">انصراف</button><button onclick="saveNewSubject()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold shadow-md">ثبت درس</button>`);
+}
+
+function saveNewSubject() {
+  const name = document.getElementById('new_sub_name').value.trim();
+  const grade = document.getElementById('new_sub_grade').value;
+  const major = document.getElementById('new_sub_major').value;
+  if (!name) return showToast('نام درس الزامی است', 'error');
+
+  const difficulty = clampInt(document.getElementById('new_sub_difficulty').value, 1, 5, 3);
+  const preferredSlot = document.getElementById('new_sub_preferred').value;
+
+  state.subjects.push({
+    id: generateId(),
+    name,
+    grade,
+    major,
+    difficulty,
+    preferredSlot: ['morning', 'end', 'any'].includes(preferredSlot) ? preferredSlot : 'any',
+    createdAt: Date.now()
+  });
+
+  saveState();
+  hideModal();
+  navigateTo('subjects');
+  showToast(`درس «${name}» با موفقیت اضافه شد.`, 'success');
+}
+
+function editSubjectName(id) {
+  const sub = state.subjects.find(s => s.id === id);
+  if (!sub) return;
+  const body = `
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-bold mb-1 text-slate-700">نام درس</label>
+        <input type="text" id="edit_sub_name" value="${escapeHtml(sub.name)}" class="w-full border rounded-xl px-3 py-2 outline-none focus:border-indigo-500">
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-bold mb-1 text-slate-700">سطح سختی ذهنی</label>
+          <select id="edit_sub_difficulty" class="searchable w-full">
+            ${SUBJECT_DIFFICULTY_LEVELS.map(d => `<option value="${d.value}" ${d.value === sub.difficulty ? 'selected' : ''}>${escapeHtml(d.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-bold mb-1 text-slate-700">زمان ترجیحی</label>
+          <select id="edit_sub_preferred" class="searchable w-full">
+            ${SUBJECT_PREFERRED_SLOTS.map(p => `<option value="${p.value}" ${p.value === sub.preferredSlot ? 'selected' : ''}>${escapeHtml(p.label)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>`;
+
+  showModal('ویرایش اطلاعات درس', body, `
+    <button onclick="hideModal()" class="px-4 py-2 bg-slate-100 rounded-xl text-slate-600 font-semibold">انصراف</button>
+    <button onclick="saveSubjectEdit('${escapeHtml(id)}')" class="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold shadow-md">ذخیره تغییرات</button>
+  `);
+}
+
+function saveSubjectEdit(id) {
+  const sub = state.subjects.find(s => s.id === id);
+  if (!sub) return;
+  const name = document.getElementById('edit_sub_name').value.trim();
+  if (!name) return showToast('نام درس الزامی است', 'error');
+
+  sub.name = name;
+  sub.difficulty = clampInt(document.getElementById('edit_sub_difficulty').value, 1, 5, 3);
+  sub.preferredSlot = document.getElementById('edit_sub_preferred').value;
+  sub.updatedAt = Date.now();
+
+  saveState();
+  hideModal();
+  navigateTo('subjects');
+  showToast('مشخصات درس بروزرسانی شد.', 'success');
+}
+
+function deleteSubject(id) {
+  if (!confirm('آیا از حذف این درس اطمینان دارید؟')) return;
+  state.subjects = state.subjects.filter(s => s.id !== id);
+  state.teachers.forEach(t => { t.subjects = (t.subjects || []).filter(sid => sid !== id); });
+  state.classes.forEach(c => { c.subjects = (c.subjects || []).filter(cs => cs.subjectId !== id); });
+
+  for (const cid in state.schedules) {
+    for (let d = 0; d < 6; d++) {
+      if (state.schedules[cid] && state.schedules[cid][d]) {
+        for (let p = 0; p < MAX_PERIODS; p++) {
+          if (state.schedules[cid][d][p] && state.schedules[cid][d][p].subjectId === id) {
+            state.schedules[cid][d][p] = null;
+          }
+        }
+      }
+    }
+  }
+
+  saveState();
+  navigateTo('subjects');
+  showToast('درس با موفقیت حذف شد.', 'success');
+}
+
+function deleteGrade(grade) {
+  if (!confirm(`آیا از حذف کلیه دروس و تنظیمات مربوط به پایه «${grade}» اطمینان دارید؟`)) return;
+  const deletedIds = state.subjects.filter(s => s.grade === grade).map(s => s.id);
+  state.subjects = state.subjects.filter(s => s.grade !== grade);
+  state.teachers.forEach(t => { t.subjects = (t.subjects || []).filter(sid => !deletedIds.includes(sid)); });
+  state.classes = state.classes.filter(c => c.grade !== grade);
+
+  saveState();
+  navigateTo('subjects');
+  showToast(`پایه ${grade} و کلیه دروس مربوطه حذف شدند.`, 'success');
+}
+
+function openImportSubjectsModal() {
+  const body = `
+    <div class="space-y-4">
+      <div class="bg-indigo-50 text-indigo-900 text-xs p-3 rounded-xl border border-indigo-100 leading-relaxed">
+        فایل اکسل (.xlsx) با ستون‌های: <b>۱. نام درس</b>، <b>۲. پایه تحصیلی</b> (اختیاری)، <b>۳. رشته</b> (اختیاری)، <b>۴. سختی (۱ تا ۵)</b> (اختیاری).
+      </div>
+      <input type="file" id="import_sub_file" accept=".xlsx" class="w-full border p-2.5 rounded-xl bg-slate-50">
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-sm font-bold mb-1">پایه پیش‌فرض</label><select id="import_sub_grade" class="searchable w-full">${state.gradeLevels.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select></div>
+        <div><label class="block text-sm font-bold mb-1">رشته پیش‌فرض</label><select id="import_sub_major" class="searchable w-full">${majorsList.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</select></div>
+      </div>
+    </div>`;
+  showModal('ورود دروس از فایل اکسل', body, `<button onclick="hideModal()" class="px-4 py-2 bg-slate-100 rounded-xl">انصراف</button><button onclick="processSubjectsImport()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold shadow-md">بارگذاری</button>`);
+}
+
+function processSubjectsImport() {
+  const file = document.getElementById('import_sub_file').files[0];
+  if (!file) return showToast('لطفاً یک فایل انتخاب کنید', 'error');
+  const grade = document.getElementById('import_sub_grade').value;
+  const major = document.getElementById('import_sub_major').value;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+      let count = 0;
+      json.slice(1).forEach(row => {
+        if (row[0]) {
+          const sName = String(row[0]).trim().slice(0, 100);
+          const sGrade = String(row || grade).trim();
+          const sMajor = String(row[2] || major).trim();
+          const sDiff = clampInt(row[3], 1, 5, 3);
+          state.subjects.push({
+            id: generateId(),
+            name: sName,
+            grade: state.gradeLevels.includes(sGrade) ? sGrade : grade,
+            major: majorsList.includes(sMajor) ? sMajor : major,
+            difficulty: sDiff,
+            preferredSlot: 'any',
+            createdAt: Date.now()
+          });
+          count++;
+        }
+      });
+      saveState();
+      hideModal();
+      navigateTo('subjects');
+      showToast(`${count} درس با موفقیت افزوده شد.`, 'success');
+    } catch(err) {
+      console.error(err);
+      showToast('خطا در پردازش فایل اکسل', 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderTeachers() {
+  const sortedTeachers = sortDataList(state.teachers, uiState.sortRules.teachers);
+
+  let html = `
+    <div class="fade-in space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+          <h2 class="text-2xl font-black text-slate-800 border-r-4 border-emerald-600 pr-3">مدیریت دبیران و اساتید</h2>
+          <p class="text-xs text-slate-500 mt-1 pr-4">تعیین روزها و زنگ‌های آزاد اساتید، سقف ساعات تدریس روزانه و دروس مجاز تدریس</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          ${renderSortToggle('teachers', uiState.sortRules.teachers)}
+          <button onclick="openImportTeachersModal()" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition-colors">
+            ورود اسامی از اکسل
+          </button>
+          <button onclick="openTeacherModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md transition-colors flex items-center gap-1.5">
+            + افزودن استاد جدید
+          </button>
+        </div>
+      </div>
+  `;
+
+  if (sortedTeachers.length === 0) {
+    html += `<div class="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">هیچ استادی ثبت نشده است.</div></div>`;
+    return html;
+  }
+
+  html += `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">`;
+  sortedTeachers.forEach(teacher => {
+    const subjectNames = (teacher.subjects || []).map(sid => state.subjects.find(x => x.id === sid)?.name).filter(Boolean);
+    let totalFreePeriods = 0;
+    for (let d = 0; d < 6; d++) {
+      if (teacher.availability && teacher.availability[d]) {
+        for (let p = 0; p < MAX_PERIODS; p++) {
+          if (teacher.availability[d][p] !== false) totalFreePeriods++;
+        }
+      }
+    }
+
+    html += `
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-col justify-between gap-4 hover:border-emerald-300 transition-all">
+        <div>
+          <div class="flex justify-between items-start mb-3">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-lg">${escapeHtml(teacher.name.charAt(0))}</div>
+              <div>
+                <h3 class="font-bold text-slate-800 text-base leading-snug">${escapeHtml(teacher.name)}</h3>
+                <span class="text-xs text-slate-500 font-normal">سقف تدریس روزانه: <b>${teacher.maxDailyPeriods || 5} زنگ</b></span>
+              </div>
+            </div>
+            <button onclick="deleteTeacher('${escapeHtml(teacher.id)}')" class="text-slate-300 hover:text-rose-600 p-1 transition-colors" title="حذف استاد"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1 mb-2">
+            <div class="flex justify-between"><span>ساعات حضور و امکان تدریس:</span> <b class="text-emerald-700">${totalFreePeriods} زنگ در هفته</b></div>
+            <div class="flex justify-between"><span>تعداد دروس مجاز:</span> <b class="text-emerald-700">${subjectNames.length} درس</b></div>
+          </div>
+          <p class="text-xs text-slate-500 line-clamp-2" title="${escapeHtml(subjectNames.join('، '))}">
+            دروس: ${subjectNames.length > 0 ? escapeHtml(subjectNames.join('، ')) : '<span class="text-amber-600">هنوز درسی منتسب نشده</span>'}
+          </p>
+        </div>
+        <button onclick="openTeacherModal('${escapeHtml(teacher.id)}')" class="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl text-xs transition-colors border border-emerald-200 flex items-center justify-center gap-1">
+          تنظیم ساعات حضور و دروس تدریسی
+        </button>
+      </div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
+window.toggleTeacherAvailRow = function(rowIdx, isChecked) {
+  document.querySelectorAll(`.avail-chk[data-row="${rowIdx}"]`).forEach(el => el.checked = isChecked);
+};
+window.toggleTeacherAvailCol = function(colIdx, isChecked) {
+  document.querySelectorAll(`.avail-chk[data-col="${colIdx}"]`).forEach(el => el.checked = isChecked);
+};
+
+function openTeacherModal(teacherId = null) {
+  const teacher = teacherId
+    ? state.teachers.find(t => t.id === teacherId)
+    : { name: '', subjects: [], availability: generateDefaultAvailability(), maxDailyPeriods: 5 };
+
+  if (teacherId && !teacher) return;
+
+  const avail = isValidAvailability(teacher.availability) ? teacher.availability : generateDefaultAvailability();
+
+  let availHtml = `
+    <div class="mt-4 border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+      <div class="bg-slate-50 p-3 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between items-center">
+        <span>ماتریس روزها و زنگ‌های آزاد برای تدریس (تیک = حضور و آمادگی تدریس)</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-center text-xs min-w-[540px]">
+          <thead class="bg-slate-100/70 border-b border-slate-200 text-slate-600">
+            <tr>
+              <th class="p-2.5 border-l border-slate-200">روز / زنگ</th>
+              ${Array.from({length:MAX_PERIODS}).map((_, i) => `
+                <th class="p-2 border-l border-slate-200">
+                  زنگ ${i+1}
+                  <div class="mt-1"><input type="checkbox" onchange="toggleTeacherAvailCol(${i}, this.checked)" title="تغییر وضعیت کل ستون" class="w-3.5 h-3.5 cursor-pointer accent-emerald-600" checked></div>
+                </th>`).join('')}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${DAYS_OF_WEEK.map((day, dIdx) => `
+              <tr class="hover:bg-slate-50">
+                <td class="p-2 font-bold bg-slate-50 border-l border-slate-200 text-slate-700">
+                  <div class="flex items-center justify-center gap-2">
+                    ${escapeHtml(day)}
+                    <input type="checkbox" onchange="toggleTeacherAvailRow(${dIdx}, this.checked)" title="تغییر وضعیت کل روز" class="w-3.5 h-3.5 cursor-pointer accent-emerald-600" checked>
+                  </div>
+                </td>
+                ${Array.from({length:MAX_PERIODS}).map((_, pIdx) => {
+                  const isAvail = avail[dIdx] && avail[dIdx][pIdx] !== false;
+                  return `
+                    <td class="p-2 border-l border-slate-100">
+                      <input type="checkbox" id="avail_${dIdx}_${pIdx}" data-row="${dIdx}" data-col="${pIdx}" class="avail-chk w-4 h-4 text-emerald-600 rounded cursor-pointer accent-emerald-600" ${isAvail ? 'checked' : ''}>
+                    </td>`;
+                }).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+  const body = `
+    <div class="space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-bold mb-1 text-slate-700">نام و نام خانوادگی استاد</label>
+          <input type="text" id="edit_teacher_name" value="${escapeHtml(teacher.name)}" class="w-full border rounded-xl px-3 py-2 outline-none focus:border-emerald-500" placeholder="مثال: دکتر محمدی" maxlength="100">
+        </div>
+        <div>
+          <label class="block text-sm font-bold mb-1 text-slate-700">حداکثر زنگ تدریس در یک روز</label>
+          <input type="number" min="1" max="${MAX_PERIODS}" id="edit_teacher_max_daily" value="${teacher.maxDailyPeriods || 5}" class="w-full border rounded-xl px-3 py-2 outline-none focus:border-emerald-500">
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-bold mb-1 text-slate-700">دروس تخصصی استاد</label>
+        <select id="edit_teacher_subjects" class="searchable w-full" multiple placeholder="انتخاب دروس تدریسی استاد...">
+          ${state.subjects.map(s => {
+            const isSelected = (teacher.subjects || []).includes(s.id) ? 'selected' : '';
+            return `<option value="${escapeHtml(s.id)}" ${isSelected}>${escapeHtml(s.name)} (${escapeHtml(s.grade)} - ${escapeHtml(s.major)})</option>`;
+          }).join('')}
+        </select>
+      </div>
+      ${availHtml}
+    </div>`;
+
+  showModal(teacherId ? 'ویرایش اطلاعات و ساعات حضور دبیر' : 'ثبت دبیر جدید', body, `
+    <button onclick="hideModal()" class="px-4 py-2 bg-slate-100 rounded-xl text-slate-600 font-semibold">انصراف</button>
+    <button onclick="saveTeacher('${escapeHtml(teacherId || '')}')" class="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold shadow-md">ذخیره مشخصات</button>
+  `);
+}
+
+function saveTeacher(id) {
+  const name = document.getElementById('edit_teacher_name').value.trim();
+  const maxDaily = clampInt(document.getElementById('edit_teacher_max_daily').value, 1, MAX_PERIODS, 5);
+  const selectedSubjects = Array.from(document.getElementById('edit_teacher_subjects').selectedOptions).map(opt => opt.value);
+
+  if (!name) return showToast('نام دبیر الزامی است', 'error');
+
+  let availability = {};
+  for (let d = 0; d < 6; d++) {
+    availability[d] = [];
+    for (let p = 0; p < MAX_PERIODS; p++) {
+      const cb = document.getElementById(`avail_${d}_${p}`);
+      availability[d][p] = cb ? cb.checked : true;
+    }
+  }
+
+  if (id) {
+    const t = state.teachers.find(x => x.id === id);
+    if (t) {
+      t.name = name;
+      t.subjects = selectedSubjects;
+      t.availability = availability;
+      t.maxDailyPeriods = maxDaily;
+      t.updatedAt = Date.now();
+    }
+  } else {
+    state.teachers.push({
+      id: generateId(),
+      name,
+      subjects: selectedSubjects,
+      availability,
+      maxDailyPeriods: maxDaily,
+      createdAt: Date.now()
+    });
+  }
+
+  saveState();
+  hideModal();
+  navigateTo('teachers');
+  showToast('مشخصات دبیر و برنامه حضور با موفقیت ثبت شد.', 'success');
+}
+
+function deleteTeacher(id) {
+  if (!confirm('آیا از حذف این استاد اطمینان دارید؟ تمام انتساب‌های او در کلاس‌ها به حالت «بدون استاد» تغییر خواهند کرد.')) return;
+  state.teachers = state.teachers.filter(t => t.id !== id);
+  state.classes.forEach(c => {
+    (c.subjects || []).forEach(cs => {
+      if (cs.teacherId === id) cs.teacherId = null;
+    });
+  });
+
+  for (const cid in state.schedules) {
+    for (let d = 0; d < 6; d++) {
+      if (state.schedules[cid] && state.schedules[cid][d]) {
+        for (let p = 0; p < MAX_PERIODS; p++) {
+          if (state.schedules[cid][d][p] && state.schedules[cid][d][p].teacherId === id) {
+            state.schedules[cid][d][p].teacherId = null;
+          }
+        }
+      }
+    }
+  }
+
+  saveState();
+  navigateTo('teachers');
+  showToast('استاد حذف شد.', 'success');
+}
+
+function openImportTeachersModal() {
+  const body = `
+    <div class="space-y-4">
+      <div class="bg-emerald-50 text-emerald-900 text-xs p-3 rounded-xl border border-emerald-100 leading-relaxed">
+        فایل اکسل را انتخاب کنید؛ اسامی موجود در <b>ستون اول</b> به عنوان نام اساتید ثبت شده و پیش‌فرض تمام ساعات برای آن‌ها آزاد خواهد بود.
+      </div>
+      <input type="file" id="import_teacher_file" accept=".xlsx" class="w-full border p-2.5 rounded-xl bg-slate-50">
+    </div>`;
+  showModal('ورود اساتید از فایل اکسل', body, `<button onclick="hideModal()" class="px-4 py-2 bg-slate-100 rounded-xl">انصراف</button><button onclick="processTeachersImport()" class="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold shadow-md">بارگذاری</button>`);
+}
+
+function processTeachersImport() {
+  const file = document.getElementById('import_teacher_file').files[0];
+  if (!file) return showToast('لطفاً یک فایل انتخاب کنید', 'error');
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+      let count = 0;
+      json.forEach((row, idx) => {
+        const raw = row[0];
+        if (raw && typeof raw === 'string' && raw.trim().length > 0) {
+          if (idx === 0 && (raw.includes('نام') || raw.includes('استاد') || raw.includes('دبیر'))) return;
+          const cleanName = raw.trim().slice(0, 100);
+          if (!state.teachers.some(t => t.name === cleanName)) {
+            state.teachers.push({
+              id: generateId(),
+              name: cleanName,
+              subjects: [],
+              availability: generateDefaultAvailability(),
+              maxDailyPeriods: 5,
+              createdAt: Date.now()
+            });
+            count++;
+          }
+        }
+      });
+      saveState();
+      hideModal();
+      navigateTo('teachers');
+      showToast(`${count} دبیر جدید ثبت شد.`, 'success');
+    } catch(err) {
+      showToast('خطا در خواندن فایل اکسل اساتید', 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderClasses() {
+  const sortedClasses = sortDataList(state.classes, uiState.sortRules.classes);
+  let html = `
+    <div class="fade-in space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+          <h2 class="text-2xl font-black text-slate-800 border-r-4 border-blue-600 pr-3">مدیریت کلاس‌ها</h2>
+          <p class="text-xs text-slate-500 mt-1 pr-4">تعریف کلاس‌ها، تنظیم روزهای فعال، تعداد زنگ در روز و لیست دروس هفتگی</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          ${renderSortToggle('classes', uiState.sortRules.classes)}
+          <button onclick="openAddClassModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md transition-colors flex items-center gap-1.5">
+            + افزودن کلاس جدید
+          </button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+  `;
+
+  if (sortedClasses.length === 0) {
+    html += `<div class="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">هیچ کلاسی ثبت نشده است.</div>`;
+  }
+
+  sortedClasses.forEach(cls => {
+    const capacity = getClassCapacity(cls);
+    const used = getClassUsedSlots(cls);
+    const capColor = used > capacity ? 'text-rose-600' : 'text-blue-700';
+
+    html += `
+      <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col justify-between gap-4 relative overflow-hidden group hover:border-blue-300 transition-all">
+        <div class="absolute top-0 right-0 w-2 h-full bg-blue-600"></div>
+        <div>
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <h3 class="font-extrabold text-xl text-slate-800">${escapeHtml(cls.name)}</h3>
+              <div class="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                <span class="bg-slate-100 px-2.5 py-0.5 rounded-md font-semibold">پایه ${escapeHtml(cls.grade)}</span>
+                <span class="bg-slate-100 px-2.5 py-0.5 rounded-md font-semibold">رشته ${escapeHtml(cls.major)}</span>
+              </div>
+            </div>
+            <div class="flex gap-1">
+              <button onclick="duplicateClass('${escapeHtml(cls.id)}')" title="کپی کلاس" class="text-slate-400 hover:text-blue-600 p-1"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg></button>
+              <button onclick="deleteClass('${escapeHtml(cls.id)}')" title="حذف کلاس" class="text-slate-400 hover:text-rose-600 p-1"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+          <div class="text-xs text-slate-600 bg-blue-50/70 p-3.5 rounded-xl border border-blue-100 space-y-1.5 my-3">
+            <div class="flex justify-between"><span>تعداد دروس فعال:</span> <b class="text-blue-900">${cls.subjects.length} درس</b></div>
+            <div class="flex justify-between"><span>ساعات پر شده هفتگی:</span> <b class="${capColor}">${used} از ${capacity} زنگ</b></div>
+            <div class="flex justify-between"><span>روزها و زنگ‌ها:</span> <b class="text-blue-900">${cls.config?.activeDays?.length || 5} روز | روزی ${cls.config?.periodsCount || 5} زنگ</b></div>
+          </div>
+        </div>
+        <button onclick="navigateTo('class_edit_${escapeHtml(cls.id)}')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5">
+          تنظیم دروس، اساتید و زنگ‌های پیوسته
+        </button>
+      </div>
+    `;
+  });
+
+  html += `</div></div>`;
+  return html;
+}
+
+function openAddClassModal() {
+  const body = `
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-bold mb-1 text-slate-700">نام کلاس</label>
+        <input type="text" id="new_class_name" class="w-full border rounded-xl px-3 py-2 outline-none focus:border-blue-500" placeholder="مثال: ۱۰۱ تجربی، کلاس شهید مطهری" maxlength="100">
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-bold mb-1 text-slate-700">پایه تحصیلی</label>
+          <select id="new_class_grade" class="searchable w-full">${state.gradeLevels.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select>
+        </div>
+        <div>
+          <label class="block text-sm font-bold mb-1 text-slate-700">رشته</label>
+          <select id="new_class_major" class="searchable w-full">${majorsList.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</select>
+        </div>
+      </div>
+    </div>`;
+  showModal('افزودن کلاس جدید', body, `<button onclick="hideModal()" class="px-4 py-2 bg-slate-100 rounded-xl">انصراف</button><button onclick="saveNewClass()" class="px-5 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-md">ایجاد کلاس</button>`);
+}
+
+function saveNewClass() {
+  const name = document.getElementById('new_class_name').value.trim();
+  const grade = document.getElementById('new_class_grade').value;
+  const major = document.getElementById('new_class_major').value;
+  if (!name) return showToast('نام کلاس الزامی است', 'error');
+
+  const matchingSubjects = state.subjects.filter(s => s.grade === grade && (s.major === major || s.major === 'عمومی'));
+  const classSubjects = matchingSubjects.map(s => {
+    const candidateTeachers = state.teachers.filter(t => (t.subjects || []).includes(s.id));
+    return {
+      subjectId: s.id,
+      periods: 2,
+      type: 'عادی',
+      teacherId: candidateTeachers.length === 1 ? candidateTeachers[0].id : null,
+      doublePeriod: false
+    };
+  });
+
+  state.classes.push({
+    id: generateId(),
+    name,
+    grade,
+    major,
+    subjects: classSubjects,
+    config: { activeDays:, periodsCount: 5, periodDuration: 45 },
+    createdAt: Date.now()
+  });
+
+  saveState();
+  hideModal();
+  navigateTo('classes');
+  showToast('کلاس با موفقیت ساخته شد و دروس پیش‌فرض پایه افزوده شدند.', 'success');
+}
+
+function duplicateClass(id) {
+  const cls = state.classes.find(c => c.id === id);
+  if (!cls) return;
+  const copy = JSON.parse(JSON.stringify(cls));
+  copy.id = generateId();
+  copy.name = copy.name + ' (رونوشت)';
+  copy.createdAt = Date.now();
+  copy.subjects.forEach(cs => { delete cs.jointId; });
+  state.classes.push(copy);
+  saveState();
+  navigateTo('classes');
+  showToast('رونوشت کلاس ساخته شد.', 'success');
+}
+
+function deleteClass(id) {
+  if (!confirm('آیا از حذف این کلاس اطمینان دارید؟')) return;
+  state.classes = state.classes.filter(c => c.id !== id);
+  delete state.schedules[id];
+  saveState();
+  navigateTo('classes');
+  showToast('کلاس حذف شد.', 'success');
+}
+
+function renderClassEditor(classId) {
+  const cls = state.classes.find(c => c.id === classId);
+  if (!cls) return renderClasses();
+
+  const capacity = getClassCapacity(cls);
+  const usedSlots = getClassUsedSlots(cls);
+  const isOverCapacity = usedSlots > capacity;
+
+  let html = `
+    <div class="fade-in space-y-6 pb-20">
+      <div class="flex flex-wrap justify-between items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex items-center gap-4">
+          <button onclick="navigateTo('classes')" class="p-2.5 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors text-slate-700"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></button>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-2xl font-black text-slate-800 border-r-4 border-blue-600 pr-3">${escapeHtml(cls.name)}</h2>
+              <button onclick="editClassName('${escapeHtml(cls.id)}')" class="text-slate-400 hover:text-blue-600 p-1"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+            </div>
+            <p class="text-xs text-slate-500 mt-1 pr-4">پایه ${escapeHtml(cls.grade)} | رشته ${escapeHtml(cls.major)} | ظرفیت: <b>${usedSlots} از ${capacity} زنگ پر شده</b></p>
+          </div>
+        </div>
+        <button onclick="openClassConfigModal('${escapeHtml(cls.id)}')" class="bg-white border-2 border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-xl font-bold text-xs shadow-sm flex items-center gap-2">
+          تنظیمات روزها و زنگ‌های کلاس
+        </button>
+      </div>
+
+      ${isOverCapacity ? `
+        <div class="bg-rose-50 border border-rose-200 p-4 rounded-2xl text-rose-800 text-xs font-semibold flex items-center gap-2 shadow-sm">
+          <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          هشدار: مجموع زنگ‌های دروس (${usedSlots}) بیشتر از ظرفیت هفتگی کلاس (${capacity}) است! لطفاً ساعات دروس را کاهش داده یا تعداد زنگ در روز را افزایش دهید.
+        </div>` : ''}
+
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-visible">
+        <div class="overflow-x-auto">
+          <table class="w-full text-right min-w-[850px]">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold text-xs">
+              <tr>
+                <th class="p-4 w-1/4">نام درس و سطح سختی</th>
+                <th class="p-4 w-28 text-center">زنگ در هفته</th>
+                <th class="p-4 w-36 text-center">زنگ پیوسته (بلوک)</th>
+                <th class="p-4 w-1/3">دبیر / مدرس</th>
+                <th class="p-4 w-28 text-center">عملیات</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-sm">
+  `;
+
+  cls.subjects.forEach((cSub, idx) => {
+    const mainSub = state.subjects.find(s => s.id === cSub.subjectId);
+    if (!mainSub) return;
+
+    const specializedTeachers = state.teachers.filter(t => (t.subjects || []).includes(mainSub.id));
+    const otherTeachers = state.teachers.filter(t => !(t.subjects || []).includes(mainSub.id));
+
+    let teacherOptions = `<option value="">-- بدون استاد (انتخاب کنید) --</option>`;
+    if (specializedTeachers.length > 0) {
+      teacherOptions += `<optgroup label="✅ دبیران تخصصی این درس">`;
+      teacherOptions += specializedTeachers.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === cSub.teacherId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
+      teacherOptions += `</optgroup>`;
+    }
+    if (otherTeachers.length > 0) {
+      teacherOptions += `<optgroup label="سایر همکاران">`;
+      teacherOptions += otherTeachers.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === cSub.teacherId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
+      teacherOptions += `</optgroup>`;
+    }
+
+    const jointBadge = cSub.jointId ? `<span class="bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-md text-[10px] font-bold ml-1" title="کلاس مشترک با سایر پایه‌ها">مشترک</span>` : '';
+
+    html += `
+      <tr class="hover:bg-slate-50/70 transition-colors">
+        <td class="p-4 font-bold text-slate-800">
+          <div class="flex items-center gap-1.5">
+            ${escapeHtml(mainSub.name)}
+            ${jointBadge}
+          </div>
+          <span class="text-[11px] text-slate-400 font-normal">دشواری: ${mainSub.difficulty} از ۵</span>
+        </td>
+        <td class="p-4 text-center">
+          <input type="number" min="1" max="${MAX_PERIODS_PER_SUBJECT}" value="${cSub.periods}" onchange="updateClassSubject('${escapeHtml(cls.id)}', ${idx}, 'periods', this.value)" class="w-16 text-center border rounded-lg py-1 outline-none focus:border-blue-500 font-bold bg-white text-sm">
+        </td>
+        <td class="p-4 text-center">
+          <label class="inline-flex items-center gap-1.5 cursor-pointer" title="دروسی مثل آزمایشگاه که باید دو زنگ پشت سر هم برگزار شوند">
+            <input type="checkbox" ${cSub.doublePeriod ? 'checked' : ''} onchange="updateClassSubject('${escapeHtml(cls.id)}', ${idx}, 'doublePeriod', this.checked)" class="w-4 h-4 text-blue-600 rounded accent-blue-600">
+            <span class="text-xs text-slate-600 font-medium">پیوسته (۲ زنگ متوالی)</span>
+          </label>
+        </td>
+        <td class="p-4">
+          <select class="searchable w-full" onchange="assignTeacherToClass('${escapeHtml(cls.id)}', ${idx}, this.value)">
+            ${teacherOptions}
+          </select>
+        </td>
+        <td class="p-4 text-center">
+          <div class="flex items-center justify-center gap-2">
+            <button onclick="openJointConfigModal('${escapeHtml(cls.id)}', ${idx})" title="تنظیم درس مشترک با کلاس‌های دیگر" class="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg></button>
+            <button onclick="removeClassSubject('${escapeHtml(cls.id)}', ${idx})" title="حذف درس از این کلاس" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+          </div>
+        </td>
+      </tr>`;
+  });
+
+  html += `
+            </tbody>
+          </table>
+        </div>
+        <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center flex-wrap gap-2">
+          <span class="text-xs text-slate-500">نکته: دروس با تیک «پیوسته» به شکل یک بلوک ۲ زنگه متوالی چیده می‌شوند.</span>
+          <div class="flex gap-2">
+            <button onclick="openAddSubjectToClassModal('${escapeHtml(cls.id)}')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm">
+              + افزودن درس اختصاصی به کلاس
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  return html;
+}
+
+function updateClassSubject(classId, subIndex, field, value) {
+  const cls = state.classes.find(c => c.id === classId);
+  if (!cls || !cls.subjects[subIndex]) return;
+
+  if (field === 'periods') {
+    value = clampInt(value, 1, MAX_PERIODS_PER_SUBJECT, 2);
+  }
+  if (field === 'doublePeriod') {
+    value = (value === true || value === 'true');
+  }
+
+  cls.subjects[subIndex][field] = value;
+
+  const jointId = cls.subjects[subIndex].jointId;
+  if (jointId) {
+    state.classes.forEach(c => {
+      c.subjects.forEach(cs => {
+        if (cs.jointId === jointId) cs[field] = value;
+      });
+    });
+  }
+
+  saveState();
+  const cap = getClassCapacity(cls);
+  const used = getClassUsedSlots(cls);
+  if (used > cap) {
+    showToast(`هشدار: کل ساعات (${used}) از ظرفیت کلاس (${cap}) بیشتر است.`, 'warning');
+  }
+}
+
+function assignTeacherToClass(classId, subIndex, teacherId) {
+  const cls = state.classes.find(c => c.id === classId);
+  if (!cls || !cls.subjects[subIndex]) return;
+
+  const validTeacherId = teacherId ? teacherId : null;
+  cls.subjects[subIndex].teacherId = validTeacherId;
+
+  const jointId = cls.subjects[subIndex].jointId;
+  if (jointId) {
+    state.classes.forEach(c => {
+      c.subjects.forEach(cs => {
+        if (cs.jointId === jointId) cs.teacherId = validTeacherId;
+      });
+    });
+  }
+
+  saveState();
+  showToast('استاد درس بروزرسانی شد.', 'success');
+}
+
+function removeClassSubject(classId, subIndex) {
+  if (!confirm('آیا مایل به حذف این درس از کلاس هستید؟')) return;
+  const cls = state.classes.find(c => c.id === classId);
+  if (cls) {
+    cls.subjects.splice(subIndex, 1);
+    saveState();
+    navigateTo(`class_edit_${classId}`);
+  }
+}
+
+function openAddSubjectToClassModal(classId) {
+  const cls = state.classes.find(c => c.id === classId);
+  if (!cls) return;
+  const existingSubIds = cls.subjects.map(cs => cs.subjectId);
+  const available = state.subjects.filter(s => !existingSubIds.includes(s.id));
+
+  if (available.length === 0) return showToast('تمام دروس تعریف‌شده در سامانه قبلاً به این کلاس اضافه شده‌اند.', 'info');
+
+  const body = `
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-bold mb-1">انتخاب درس</label>
+        <select id="new_csub_id" class="searchable w-full">
+          ${available.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)} (${escapeHtml(s.grade)} - ${escapeHtml(s.major)})</option>`).join('')}
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-bold mb-1">تعداد زنگ در هفته</label>
+          <input type="number" min="1" max="${MAX_PERIODS_PER_SUBJECT}" id="new_csub_periods" value="2" class="w-full border rounded-xl px-3 py-2">
+        </div>
+        <div class="flex items-center pt-6">
+          <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-semibold">
+            <input type="checkbox" id="new_csub_double" class="w-4 h-4 text-blue-600 rounded accent-blue-600">
+            <span>زنگ پیوسته (بلوک ۲ زنگه)</span>
+          </label>
+        </div>
+      </div>
+    </div>`;
+  showModal('افزودن درس به کلاس', body, `<button onclick="hideModal()" class="px-4 py-2 bg-slate-100 rounded-xl">انصراف</button><button onclick="addSubjectToClass('${escapeHtml(classId)}')" class="px-5 py-2 bg-blue-600 text-white rounded-xl font-bold">افزودن</button>`);
+}
+
+function addSubjectToClass(classId) {
+  const cls = state.classes.find(c => c.id === classId);
+  if (!cls) return;
+  const subjectId = document.getElementById('new_csub_id').value;
+  const periods = clampInt(document.getElementById('new_csub_periods').value, 1, MAX_PERIODS_PER_SUBJECT, 2);
+  const doublePeriod = document.getElementById('new_csub_double').checked;
+
+  const candidateTeachers = state.teachers.filter(t => (t.subjects || []).includes(subjectId));
+
+  cls.subjects.push({
+    subjectId,
+    periods,
+    type: 'عادی',
+    teacherId: candidateTeachers.length === 1 ? candidateTeachers[0].id : null,
+    doublePeriod
+  });
+
+  saveState();
+  hideModal();
+  navigateTo(`class_edit_${classId}`);
+  showToast('درس با موفقیت اضافه شد.', 'success');
+}
+
+function editClassName(id) {
+  const cls = state.classes.find(c => c.id === id);
+  if (!cls) return;
+  const newName = prompt('نام جدید کلاس را وارد کنید:', cls.name);
+  if (newName && newName.trim()) {
+    cls.name = newName.trim().slice(0, 100);
+    saveState();
+    navigateTo(`class_edit_${id}`);
+  }
+}
+
+function openClassConfigModal(classId) {
+  const cls = state.classes.find(c => c.id === classId);
+  if (!cls) return;
+  const cfg = cls.config || { activeDays:, periodsCount: 5, periodDuration: 45 };
+
+  const daysHtml = DAYS_OF_WEEK.map((d, i) => `
+    <label class="flex items-center gap-2 p-2.5 border rounded-xl bg-white cursor-pointer hover:bg-slate-50 text-xs font-semibold">
+      <input type="checkbox" id="cfg_day_${i}" value="${i}" class="w-4 h-4 accent-blue-600" ${cfg.activeDays.includes(i) ? 'checked' : ''}>
+      <span>${escapeHtml(d)}</span>
+    </label>
+  `).join('');
+
+  const body = `
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-bold mb-2">روزهای فعال آموزشی هفته</label>
+        <div class="grid grid-cols-3 gap-2">${daysHtml}</div>
+      </div>
+      <div class="grid grid-cols-2 gap-4 border-t pt-4">
+        <div>
+          <label class="block text-sm font-bold mb-1">تعداد زنگ در هر روز</label>
+          <input type="number" min="1" max="${MAX_PERIODS}" id="cfg_periods" value="${cfg.periodsCount}" class="w-full border rounded-xl px-3 py-2 outline-none">
+        </div>
+        <div>
+          <label class="block text-sm font-bold mb-1">طول مدت هر زنگ (دقیقه)</label>
+          <input type="number" min="30" max="${MAX_PERIOD_DURATION}" id="cfg_duration" value="${cfg.periodDuration}" class="w-full border rounded-xl px-3 py-2 outline-none">
+        </div>
+      </div>
+    </div>`;
+
+  showModal('تنظیمات زمانی کلاس', body, `<button onclick="hideModal()" class="px-4 py-2 bg-slate-100 rounded-xl">انصراف</button><button onclick="saveClassConfig('${escapeHtml(classId)}')" class="px-5 py-2 bg-blue-600 text-white rounded-xl font-bold">ذخیره</button>`);
+}
+
+function saveClassConfig(classId) {
+  const cls = state.classes.find(c => c.id === classId);
+  if (!cls) return;
+
+  let activeDays = [];
+  for (let i = 0; i < 6; i++) {
+    const cb = document.getElementById(`cfg_day_${i}`);
+    if (cb && cb.checked) activeDays.push(i);
+  }
+
+  if (activeDays.length === 0) return showToast('حداقل یک روز باید انتخاب شود.', 'error');
+
+  const periodsCount = clampInt(document.getElementById('cfg_periods').value, 1, MAX_PERIODS, 5);
+  const periodDuration = clampInt(document.getElementById('cfg_duration').value, 30, MAX_PERIOD_DURATION, 45);
+
+  cls.config = { activeDays, periodsCount, periodDuration };
+  saveState();
+  hideModal();
+  navigateTo(`class_edit_${classId}`);
+  showToast('تنظیمات زمانی ذخیره شد.', 'success');
+}
+
+function openJointConfigModal(classId, subIndex) {
+  const cls = state.classes.find(c => c.id === classId);
+  if (!cls) return;
+  const cSub = cls.subjects[subIndex];
+  const jointId = cSub.jointId || generateId();
+
+  let html = `
+    <div class="space-y-4">
+      <div class="bg-purple-50 text-purple-900 text-xs p-3.5 rounded-xl border border-purple-100 leading-relaxed">
+        دروس مشترک، دروسی هستند که دانش‌آموزان دو یا چند کلاس با هم در <b>یک روز، یک زنگ و با یک استاد یکسان</b> در آن شرکت می‌کنند (مثلاً کارگاه عمومی، هنر یا ورزش مشترک).
+      </div>
+      <p class="text-sm font-bold text-slate-700">انتخاب دروس متناظر در کلاس‌های دیگر:</p>
+      <div class="max-h-64 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1.5 custom-scrollbar">
+  `;
+
+  let foundOther = false;
+  state.classes.forEach(otherCls => {
+    if (otherCls.id === classId) return;
+    otherCls.subjects.forEach((otherSub, otherIdx) => {
+      foundOther = true;
+      const isLinked = otherSub.jointId === cSub.jointId && cSub.jointId != null;
+      const subName = state.subjects.find(s => s.id === otherSub.subjectId)?.name || 'نامشخص';
+
+      html += `
+        <label class="flex items-center gap-3 p-2.5 hover:bg-purple-50/60 rounded-xl border border-slate-100 cursor-pointer transition-colors">
+          <input type="checkbox" class="w-4 h-4 text-purple-600 rounded accent-purple-600" onchange="toggleJointStatus('${escapeHtml(classId)}', ${subIndex}, '${escapeHtml(otherCls.id)}', ${otherIdx}, this.checked, '${jointId}')" ${isLinked ? 'checked' : ''}>
+          <div class="text-xs">
+            <span class="font-bold text-slate-800">کلاس ${escapeHtml(otherCls.name)}</span> —
+            <span class="text-slate-600">درس ${escapeHtml(subName)}</span>
+          </div>
+        </label>`;
+    });
+  });
+
+  if (!foundOther) html += `<div class="text-center py-6 text-slate-400 text-xs">کلاس دیگری در سیستم وجود ندارد.</div>`;
+  html += `</div></div>`;
+
+  showModal('تنظیم درس مشترک بین کلاسی', html, `<button onclick="hideModal(); navigateTo('class_edit_${escapeHtml(classId)}')" class="px-5 py-2 bg-slate-800 text-white rounded-xl font-bold">بستن</button>`);
+}
+
+window.toggleJointStatus = function(c1, idx1, c2, idx2, isChecked, jointId) {
+  const cls1 = state.classes.find(c => c.id === c1);
+  const cls2 = state.classes.find(c => c.id === c2);
+  if (!cls1 || !cls2) return;
+
+  if (isChecked) {
+    cls1.subjects[idx1].jointId = jointId;
+    cls2.subjects[idx2].jointId = jointId;
+    cls2.subjects[idx2].teacherId = cls1.subjects[idx1].teacherId;
+    cls2.subjects[idx2].periods = cls1.subjects[idx1].periods;
+    cls2.subjects[idx2].doublePeriod = cls1.subjects[idx1].doublePeriod;
+  } else {
+    delete cls2.subjects[idx2].jointId;
+    const anyoneElse = state.classes.some(c => c.id !== c1 && c.subjects.some(cs => cs.jointId === jointId));
+    if (!anyoneElse) delete cls1.subjects[idx1].jointId;
+  }
+  saveState();
+  openJointConfigModal(c1, idx1);
+};
+
+function runPreflightChecks() {
+  const errors = [];
+  const warnings = [];
+
+  state.classes.forEach(cls => {
+    const cap = getClassCapacity(cls);
+    const used = getClassUsedSlots(cls);
+    if (used > cap) {
+      errors.push(`کلاس «${cls.name}»: کل ساعات دروس (${used} زنگ) از ظرفیت فعال کلاس (${cap} زنگ) بیشتر است.`);
+    }
+  });
+
+  const teacherDemand = {};
+  state.classes.forEach(cls => {
+    cls.subjects.forEach(cs => {
+      if (cs.teacherId) {
+        if (!cs.jointId) {
+          teacherDemand[cs.teacherId] = (teacherDemand[cs.teacherId] || 0) + (cs.periods || 0);
+        } else {
+          if (!teacherDemand[cs.teacherId + '_j_' + cs.jointId]) {
+            teacherDemand[cs.teacherId + '_j_' + cs.jointId] = true;
+            teacherDemand[cs.teacherId] = (teacherDemand[cs.teacherId] || 0) + (cs.periods || 0);
+          }
+        }
+      } else {
+        const sub = state.subjects.find(s => s.id === cs.subjectId);
+        warnings.push(`کلاس «${cls.name}»: درس «${sub?.name || 'نامشخص'}» فاقد استاد مشخص است.`);
+      }
+    });
+  });
+
+  state.teachers.forEach(t => {
+    let totalAvail = 0;
+    for (let d = 0; d < 6; d++) {
+      if (t.availability && t.availability[d]) {
+        for (let p = 0; p < MAX_PERIODS; p++) {
+          if (t.availability[d][p] !== false) totalAvail++;
+        }
+      }
+    }
+    const needed = teacherDemand[t.id] || 0;
+    if (needed > totalAvail) {
+      errors.push(`استاد «${t.name}»: مجموع نیاز تدریس موظف او (${needed} زنگ) از کل ساعات حضور آزاد اعلام‌شده (${totalAvail} زنگ) بیشتر است.`);
+    }
+  });
+
+  return { errors, warnings };
+}
+
+function renderScheduler() {
+  const preflight = runPreflightChecks();
+
+  let checkHtml = '';
+  if (preflight.errors.length > 0) {
+    checkHtml += `
+      <div class="bg-rose-50 border border-rose-200 rounded-2xl p-4 mb-6 shadow-sm">
+        <h4 class="font-bold text-rose-800 text-sm mb-1.5 flex items-center gap-2">
+          <svg class="w-5 h-5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          خطاهای عدم امکان چیدمان قطعی (اصل عدم کفایت ساعات):
+        </h4>
+        <ul class="list-disc list-inside text-xs text-rose-700 space-y-1">
+          ${preflight.errors.map(e => `<li>${escapeHtml(e)}</li>`).join('')}
+        </ul>
+      </div>`;
+  }
+  if (preflight.warnings.length > 0) {
+    checkHtml += `
+      <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 shadow-sm">
+        <h4 class="font-bold text-amber-800 text-sm mb-1.5 flex items-center gap-2">
+          <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          هشدارها و توصیه‌ها:
+        </h4>
+        <ul class="list-disc list-inside text-xs text-amber-700 space-y-1">
+          ${preflight.warnings.slice(0, 5).map(w => `<li>${escapeHtml(w)}</li>`).join('')}
+          ${preflight.warnings.length > 5 ? `<li>و ${preflight.warnings.length - 5} مورد دیگر...</li>` : ''}
+        </ul>
+      </div>`;
+  }
+
+  let html = `
+    <div class="fade-in max-w-7xl mx-auto space-y-6 pb-20">
+      ${checkHtml}
+
+      <div class="bg-gradient-to-r from-amber-500 via-amber-600 to-indigo-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>
+          <h2 class="text-2xl font-black mb-1">موتور هوشمند زمان‌بندی و چینش پداگوژیک</h2>
+          <p class="text-amber-100 text-xs max-w-2xl leading-relaxed">
+            الگوریتم تبرید شبیه‌سازی‌شده (Simulated Annealing) با رعایت ۱۰۰٪ عدم تداخل اساتید، حفظ بلوک‌های متوالی دروس آزمایشگاهی، توزیع متوازن بار شناختی صبح/عصر، و کاهش پنجره‌های خالی اساتید.
+          </p>
+        </div>
+        <button id="run-scheduler-btn" onclick="executeSmartScheduler()" class="bg-white text-slate-900 hover:bg-amber-50 font-black px-6 py-3.5 rounded-2xl shadow-md transition-transform transform hover:-translate-y-0.5 flex items-center gap-2 shrink-0 text-sm">
+          <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          اجرای الگوریتم هوشمند
+        </button>
+      </div>
+
+      <div id="schedule-dashboard" class="space-y-6">
+        ${renderScheduleTabsAndContent()}
+      </div>
+    </div>`;
+  return html;
+}
+
+const COGNITIVE_PERIOD_CAPACITY = [1.0, 0.95, 0.88, 0.72, 0.60, 0.52, 0.45, 0.40];
+
+let activeScheduleRunner = null;
+
+function executeSmartScheduler() {
+  if (activeScheduleRunner) return showToast('زمان‌بندی دیگری در حال اجراست؛ لطفاً شکیبا باشید.', 'info');
+
+  const runBtn = document.getElementById('run-scheduler-btn');
+  if (runBtn) { runBtn.disabled = true; runBtn.innerText = 'در حال محاسبه...'; }
+
+  const atomicBlocks = [];
+
+  state.classes.forEach(cls => {
+    const pCount = cls.config?.periodsCount || 5;
+
+    cls.subjects.forEach(cs => {
+      const sub = state.subjects.find(s => s.id === cs.subjectId);
+      if (!sub) return;
+
+      const difficulty = clampInt(sub.difficulty, 1, 5, 3);
+      const prefSlot = sub.preferredSlot || 'any';
+      let remaining = cs.periods || 2;
+
+      if (cs.doublePeriod && pCount >= 2) {
+        while (remaining >= 2) {
+          atomicBlocks.push({
+            id: generateId(),
+            classId: cls.id,
+            subjectId: cs.subjectId,
+            teacherId: cs.teacherId,
+            name: sub.name,
+            difficulty,
+            preferredSlot: prefSlot,
+            length: 2,
+            jointId: cs.jointId || null
+          });
+          remaining -= 2;
+        }
+      }
+
+      while (remaining > 0) {
+        atomicBlocks.push({
+          id: generateId(),
+          classId: cls.id,
+          subjectId: cs.subjectId,
+          teacherId: cs.teacherId,
+          name: sub.name,
+          difficulty,
+          preferredSlot: prefSlot,
+          length: 1,
+          jointId: cs.jointId || null
+        });
+        remaining--;
+      }
+    });
+  });
+
+  const classIds = state.classes.map(c => c.id);
+  const classMeta = {};
+  classIds.forEach(cid => {
+    const cls = state.classes.find(c => c.id === cid);
+    const activeDays = Array.isArray(cls.config?.activeDays) ? cls.config.activeDays :;
+    const pCount = cls.config?.periodsCount || 5;
+    classMeta[cid] = { activeDays, pCount };
+  });
+
+  const teacherAvail = {};
+  state.teachers.forEach(t => {
+    teacherAvail[t.id] = isValidAvailability(t.availability) ? t.availability : generateDefaultAvailability();
+  });
+
+  function cloneGrid(grid) {
+    const copy = {};
+    classIds.forEach(cid => {
+      copy[cid] = {};
+      for (let d = 0; d < 6; d++) copy[cid][d] = grid[cid][d].slice();
+    });
+    return copy;
+  }
+
+  function emptyGrid() {
+    const grid = {};
+    classIds.forEach(cid => {
+      grid[cid] = {};
+      for (let d = 0; d < 6; d++) grid[cid][d] = new Array(MAX_PERIODS).fill(null);
+    });
+    return grid;
+  }
+
+  function evaluateGrid(grid) {
+    let cost = 0;
+
+    for (let d = 0; d < 6; d++) {
+      for (let p = 0; p < MAX_PERIODS; p++) {
+        const teacherOccupants = {};
+        const jointSeen = {};
+
+        for (let i = 0; i < classIds.length; i++) {
+          const cid = classIds[i];
+          const item = grid[cid][d][p];
+          if (!item || !item.teacherId) continue;
+
+          if (item.jointId) {
+            if (jointSeen[item.jointId]) continue;
+            jointSeen[item.jointId] = true;
+          }
+
+          const tid = item.teacherId;
+          teacherOccupants[tid] = (teacherOccupants[tid] || 0) + 1;
+
+          const avail = teacherAvail[tid];
+          if (avail && avail[d] && avail[d][p] === false) {
+            cost += 600000;
+          }
+        }
+
+        for (const tid in teacherOccupants) {
+          if (teacherOccupants[tid] > 1) {
+            cost += (teacherOccupants[tid] - 1) * 800000;
+          }
+        }
+      }
+    }
+
+    state.teachers.forEach(t => {
+      const tid = t.id;
+      for (let d = 0; d < 6; d++) {
+        let minP = 99, maxP = -1, teachCount = 0;
+        const busyPeriods = {};
+
+        for (let i = 0; i < classIds.length; i++) {
+          const cid = classIds[i];
+          for (let p = 0; p < MAX_PERIODS; p++) {
+            const item = grid[cid][d][p];
+            if (item && item.teacherId === tid) {
+              busyPeriods[p] = true;
+              if (p < minP) minP = p;
+              if (p > maxP) maxP = p;
+            }
+          }
+        }
+
+        teachCount = Object.keys(busyPeriods).length;
+        if (teachCount > 0) {
+          if (teachCount > (t.maxDailyPeriods || 5)) {
+            cost += (teachCount - (t.maxDailyPeriods || 5)) * 400;
+          }
+          for (let p = minP; p <= maxP; p++) {
+            if (!busyPeriods[p]) {
+              cost += 80;
+            }
+          }
+        }
+      }
+    });
+
+    classIds.forEach(cid => {
+      const meta = classMeta[cid];
+      const daySubjectCounts = {};
+
+      for (let d = 0; d < 6; d++) {
+        if (!meta.activeDays.includes(d)) continue;
+
+        for (let p = 0; p < meta.pCount; p++) {
+          const item = grid[cid][d][p];
+          if (!item) continue;
+
+          const capacity = COGNITIVE_PERIOD_CAPACITY[p] || 0.4;
+          const demand = item.difficulty / 5;
+          if (demand > capacity + 0.15) {
+            cost += Math.round((demand - capacity) * 70);
+          }
+
+          if (item.preferredSlot === 'morning' && p >= 3) cost += 40;
+          if (item.preferredSlot === 'end' && p < meta.pCount - 2) cost += 40;
+
+          if (p + 1 < meta.pCount) {
+            const next = grid[cid][d][p + 1];
+            if (next && item.subjectId !== next.subjectId) {
+              if (item.difficulty >= 4 && next.difficulty >= 4) {
+                cost += 35;
+              }
+            }
+          }
+
+          if (!daySubjectCounts[item.subjectId]) daySubjectCounts[item.subjectId] = [0,0,0,0,0,0];
+          daySubjectCounts[item.subjectId][d]++;
+        }
+      }
+
+      for (const sid in daySubjectCounts) {
+        for (let d = 0; d < 6; d++) {
+          if (daySubjectCounts[sid][d] > 2) {
+            cost += (daySubjectCounts[sid][d] - 2) * 50;
+          }
+        }
+      }
+    });
+
+    return cost;
+  }
+
+  let currentGrid = emptyGrid();
+
+  atomicBlocks.sort((a, b) => {
+    if (a.jointId && !b.jointId) return -1;
+    if (!a.jointId && b.jointId) return 1;
+    return b.length - a.length;
+  });
+
+  atomicBlocks.forEach(block => {
+    const cid = block.classId;
+    const meta = classMeta[cid];
+    let placed = false;
+
+    if (block.length === 2) {
+      for (let d of meta.activeDays) {
+        for (let p = 0; p < meta.pCount - 1; p++) {
+          if (!currentGrid[cid][d][p] && !currentGrid[cid][d][p+1]) {
+            currentGrid[cid][d][p] = block;
+            currentGrid[cid][d][p+1] = block;
+            placed = true;
+            break;
+          }
+        }
+        if (placed) break;
+      }
+    }
+
+    if (!placed) {
+      for (let d of meta.activeDays) {
+        for (let p = 0; p < meta.pCount; p++) {
+          if (!currentGrid[cid][d][p]) {
+            currentGrid[cid][d][p] = block;
+            if (block.length === 2 && p + 1 < meta.pCount && !currentGrid[cid][d][p+1]) {
+              currentGrid[cid][d][p+1] = block;
+            }
+            placed = true;
+            break;
+          }
+        }
+        if (placed) break;
+      }
+    }
+  });
+
+  let currentCost = evaluateGrid(currentGrid);
+  let bestGrid = cloneGrid(currentGrid);
+  let bestCost = currentCost;
+
+  let iteration = 0;
+  const maxIterations = 35000;
+  let T = 1.0;
+  const alpha = 0.9997;
+
+  activeScheduleRunner = true;
+
+  function step() {
+    if (!activeScheduleRunner) return;
+
+    const start = performance.now();
+    while (performance.now() - start < 45 && iteration < maxIterations) {
+      iteration++;
+
+      const cid = classIds[Math.floor(Math.random() * classIds.length)];
+      const meta = classMeta[cid];
+      if (meta.activeDays.length === 0 || meta.pCount === 0) continue;
+
+      const d1 = meta.activeDays[Math.floor(Math.random() * meta.activeDays.length)];
+      const p1 = Math.floor(Math.random() * meta.pCount);
+      const d2 = meta.activeDays[Math.floor(Math.random() * meta.activeDays.length)];
+      const p2 = Math.floor(Math.random() * meta.pCount);
+
+      if (d1 === d2 && p1 === p2) continue;
+
+      const item1 = currentGrid[cid][d1][p1];
+      const item2 = currentGrid[cid][d2][p2];
+      if (!item1 && !item2) continue;
+
+      currentGrid[cid][d1][p1] = item2;
+      currentGrid[cid][d2][p2] = item1;
+
+      const newCost = evaluateGrid(currentGrid);
+      const delta = newCost - currentCost;
+
+      if (delta < 0 || Math.exp(-delta / (T * 120)) > Math.random()) {
+        currentCost = newCost;
+        if (currentCost < bestCost) {
+          bestCost = currentCost;
+          bestGrid = cloneGrid(currentGrid);
+          if (bestCost === 0) {
+            iteration = maxIterations;
+            break;
+          }
+        }
+      } else {
+        currentGrid[cid][d1][p1] = item1;
+        currentGrid[cid][d2][p2] = item2;
+      }
+
+      T *= alpha;
+    }
+
+    if (iteration < maxIterations) {
+      const pct = Math.round((iteration / maxIterations) * 100);
+      if (runBtn) runBtn.innerText = `در حال بهینه‌سازی الگوریتم... ${pct}٪`;
+      setTimeout(step, 10);
+    } else {
+      state.schedules = bestGrid;
+      saveState();
+      activeScheduleRunner = null;
+      if (runBtn) {
+        runBtn.disabled = false;
+        runBtn.innerText = 'اجرای مجدد الگوریتم هوشمند';
+      }
+      const container = document.getElementById('schedule-dashboard');
+      if (container) container.innerHTML = renderScheduleTabsAndContent();
+      showToast('برنامه با موفقیت تولید و بهینه‌سازی شد.', 'success');
+    }
+  }
+
+  showToast('الگوریتم هوشمند شروع به کار کرد...', 'info');
+  setTimeout(step, 40);
+}
+
+function renderScheduleTabsAndContent() {
+  if (!state.schedules || Object.keys(state.schedules).length === 0) {
+    return `<div class="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-300 text-slate-400">هنوز برنامه‌ای تولید نشده است. روی دکمه نارنجی بالا کلیک کنید.</div>`;
+  }
+
+  const isClassView = uiState.scheduleTab === 'classes';
+
+  let html = `
+    <div class="space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
+        <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+          <button onclick="switchScheduleTab('classes')" class="px-4 py-2 rounded-lg text-xs font-bold transition-all ${isClassView ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}">
+            برنامه به تفکیک کلاس‌ها
+          </button>
+          <button onclick="switchScheduleTab('teachers')" class="px-4 py-2 rounded-lg text-xs font-bold transition-all ${!isClassView ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}">
+            برنامه به تفکیک معلمان (برنامه اختصاصی استاد)
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="exportSchedule('excel')" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors">
+            خروجی Excel
+          </button>
+          <button onclick="exportSchedule('pdf')" class="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors">
+            خروجی PDF
+          </button>
+          <button onclick="window.print()" class="bg-slate-800 text-white hover:bg-slate-900 px-4 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors">
+            چاپ پرینتر
+          </button>
+        </div>
+      </div>
+
+      <div class="bg-indigo-50 border border-indigo-200 p-3 rounded-2xl text-xs text-indigo-900 no-print flex items-center justify-between">
+        <span>💡 <b>قابلیت جابجایی دستی:</b> روی هر زنگ کلیک کنید تا انتخاب شود، سپس روی خانه مقصد در همان کلاس کلیک کنید تا جابجا شوند.</span>
+        ${uiState.selectedCell ? `<button onclick="cancelCellSelection()" class="text-rose-600 underline font-bold mr-2">لغو انتخاب</button>` : ''}
+      </div>
+
+      <div id="print-area" class="space-y-8">
+        ${isClassView ? renderClassesTimetables() : renderTeachersTimetables()}
+      </div>
+    </div>`;
+  return html;
+}
+
+function switchScheduleTab(tab) {
+  uiState.scheduleTab = tab;
+  uiState.selectedCell = null;
+  const container = document.getElementById('schedule-dashboard');
+  if (container) container.innerHTML = renderScheduleTabsAndContent();
+}
+
+function cancelCellSelection() {
+  uiState.selectedCell = null;
+  const container = document.getElementById('schedule-dashboard');
+  if (container) container.innerHTML = renderScheduleTabsAndContent();
+}
+
+function handleCellClick(classId, d, p) {
+  if (!uiState.selectedCell) {
+    uiState.selectedCell = { classId, d, p };
+    const container = document.getElementById('schedule-dashboard');
+    if (container) container.innerHTML = renderScheduleTabsAndContent();
+  } else {
+    if (uiState.selectedCell.classId !== classId) {
+      showToast('جابجایی دستی فقط بین زنگ‌های یک کلاس امکان‌پذیر است.', 'warning');
+      uiState.selectedCell = null;
+      const container = document.getElementById('schedule-dashboard');
+      if (container) container.innerHTML = renderScheduleTabsAndContent();
+      return;
+    }
+
+    const { d: d1, p: p1 } = uiState.selectedCell;
+    const d2 = d, p2 = p;
+
+    const tmp = state.schedules[classId][d1][p1];
+    state.schedules[classId][d1][p1] = state.schedules[classId][d2][p2];
+    state.schedules[classId][d2][p2] = tmp;
+
+    uiState.selectedCell = null;
+    saveState();
+    const container = document.getElementById('schedule-dashboard');
+    if (container) container.innerHTML = renderScheduleTabsAndContent();
+    showToast('دو زنگ با موفقیت جابجا شدند.', 'success');
+  }
+}
+
+function renderClassesTimetables() {
+  let html = '';
+
+  state.classes.forEach(cls => {
+    const sched = state.schedules[cls.id];
+    if (!sched) return;
+
+    const activeDays = cls.config?.activeDays ||;
+    const pCount = cls.config?.periodsCount || 5;
+
+    html += `
+      <div class="bg-white border-2 border-slate-800 rounded-2xl overflow-hidden shadow-sm page-break mb-8">
+        <div class="bg-slate-800 text-white text-center py-3 font-black text-base flex justify-between px-6 items-center">
+          <span>${escapeHtml(state.settings.schoolName)}</span>
+          <span class="text-amber-300">برنامه هفتگی کلاس ${escapeHtml(cls.name)} (پایه ${escapeHtml(cls.grade)} - ${escapeHtml(cls.major)})</span>
+          <span class="text-xs text-slate-400">سال تحصیلی جاری</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-center text-xs border-collapse" id="table_${escapeHtml(cls.id)}">
+            <thead>
+              <tr class="bg-slate-100 border-b border-slate-300 text-slate-700">
+                <th class="p-3 border-l border-slate-300 font-extrabold w-28">روز / زنگ</th>
+                ${Array.from({length: pCount}).map((_, i) => `
+                  <th class="p-3 border-l border-slate-300 font-extrabold">
+                    زنگ ${i+1}
+                    <div class="text-[10px] font-normal text-slate-500">${cls.config?.periodDuration || 45} دقیقه</div>
+                  </th>`).join('')}
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+              ${activeDays.map(dIdx => {
+                return `
+                  <tr>
+                    <td class="p-3 font-black bg-slate-50 border-l border-slate-300 text-slate-800">${escapeHtml(DAYS_OF_WEEK[dIdx])}</td>
+                    ${Array.from({length: pCount}).map((_, pIdx) => {
+                      const lesson = sched[dIdx] && sched[dIdx][pIdx];
+                      const isSelected = uiState.selectedCell && uiState.selectedCell.classId === cls.id && uiState.selectedCell.d === dIdx && uiState.selectedCell.p === pIdx;
+                      const selectedClass = isSelected ? 'cell-selected' : 'cell-swappable';
+
+                      if (!lesson) {
+                        return `<td onclick="handleCellClick('${escapeHtml(cls.id)}', ${dIdx}, ${pIdx})" class="p-3 border-l border-slate-200 text-slate-300 ${selectedClass}">- خالی -</td>`;
+                      }
+
+                      const teacher = state.teachers.find(t => t.id === lesson.teacherId);
+                      const tName = teacher ? teacher.name : '<span class="text-rose-500 font-semibold">بدون استاد</span>';
+                      const jointBadge = lesson.jointId ? `<span class="bg-purple-100 text-purple-800 text-[9px] px-1.5 py-0.2 rounded border border-purple-200 inline-block mt-0.5">مشترک</span>` : '';
+
+                      return `
+                        <td onclick="handleCellClick('${escapeHtml(cls.id)}', ${dIdx}, ${pIdx})" class="p-2.5 border-l border-slate-200 hover:bg-slate-50 ${selectedClass}">
+                          <div class="font-extrabold text-slate-900 text-sm">${escapeHtml(lesson.name)}</div>
+                          <div class="text-slate-500 mt-0.5">${tName}</div>
+                          ${jointBadge}
+                        </td>`;
+                    }).join('')}
+                  </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  });
+
+  return html;
+}
+
+function renderTeachersTimetables() {
+  let html = '';
+
+  state.teachers.forEach(t => {
+    let teachCount = 0;
+    const matrix = Array.from({length: 6}, () => new Array(MAX_PERIODS).fill(null));
+
+    state.classes.forEach(cls => {
+      const sched = state.schedules[cls.id];
+      if (!sched) return;
+      for (let d = 0; d < 6; d++) {
+        for (let p = 0; p < MAX_PERIODS; p++) {
+          const l = sched[d] && sched[d][p];
+          if (l && l.teacherId === t.id) {
+            matrix[d][p] = { subjectName: l.name, className: cls.name, jointId: l.jointId };
+            teachCount++;
+          }
+        }
+      }
+    });
+
+    html += `
+      <div class="bg-white border-2 border-emerald-800 rounded-2xl overflow-hidden shadow-sm page-break mb-8">
+        <div class="bg-emerald-800 text-white text-center py-3 font-black text-base flex justify-between px-6 items-center">
+          <span>${escapeHtml(state.settings.schoolName)}</span>
+          <span class="text-emerald-200">برنامه هفتگی تدریس: ${escapeHtml(t.name)}</span>
+          <span class="text-xs text-emerald-300">مجموع: <b>${teachCount} زنگ در هفته</b></span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-center text-xs border-collapse" id="table_teacher_${escapeHtml(t.id)}">
+            <thead>
+              <tr class="bg-slate-100 border-b border-slate-300 text-slate-700">
+                <th class="p-3 border-l border-slate-300 font-extrabold w-28">روز / زنگ</th>
+                ${Array.from({length: MAX_PERIODS}).map((_, i) => `<th class="p-3 border-l border-slate-300 font-extrabold">زنگ ${i+1}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+              ${DAYS_OF_WEEK.map((day, dIdx) => {
+                return `
+                  <tr>
+                    <td class="p-3 font-black bg-slate-50 border-l border-slate-300 text-slate-800">${escapeHtml(day)}</td>
+                    ${Array.from({length: MAX_PERIODS}).map((_, pIdx) => {
+                      const item = matrix[dIdx][pIdx];
+                      const isAvail = t.availability && t.availability[dIdx] && t.availability[dIdx][pIdx] !== false;
+
+                      if (!item) {
+                        const bg = !isAvail ? 'bg-slate-100/60 text-slate-400' : 'text-slate-300';
+                        const label = !isAvail ? 'عدم حضور' : '-';
+                        return `<td class="p-3 border-l border-slate-200 ${bg}">${label}</td>`;
+                      }
+
+                      return `
+                        <td class="p-2.5 border-l border-slate-200 bg-emerald-50/40">
+                          <div class="font-bold text-slate-900">${escapeHtml(item.subjectName)}</div>
+                          <div class="text-[11px] text-emerald-800 font-semibold mt-0.5">کلاس ${escapeHtml(item.className)}</div>
+                        </td>`;
+                    }).join('')}
+                  </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  });
+
+  return html;
+}
+
+function exportSchedule(type) {
+  const el = document.getElementById('print-area');
+  if (!el) return;
+
+  if (type === 'pdf') {
+    const opt = {
+      margin: 0.3,
+      filename: `${state.settings.schoolName || 'schedule'}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }
+    };
+    html2pdf().set(opt).from(el).save();
+  } else if (type === 'excel') {
+    const wb = XLSX.utils.book_new();
+    const usedSheetNames = new Set();
+
+    if (uiState.scheduleTab === 'classes') {
+      state.classes.forEach(cls => {
+        const table = document.getElementById(`table_${cls.id}`);
+        if (table) {
+          const ws = XLSX.utils.table_to_sheet(table);
+          let rawName = (cls.name || 'Class').replace(/[\\/*?[\]:]/g, '_').trim().substring(0, 26);
+          let safeName = rawName || 'Class';
+          let counter = 1;
+          while (usedSheetNames.has(safeName)) {
+            safeName = `${rawName}_${counter++}`;
+          }
+          usedSheetNames.add(safeName);
+          XLSX.utils.book_append_sheet(wb, ws, safeName);
+        }
+      });
+    } else {
+      state.teachers.forEach(t => {
+        const table = document.getElementById(`table_teacher_${t.id}`);
+        if (table) {
+          const ws = XLSX.utils.table_to_sheet(table);
+          let rawName = (t.name || 'Teacher').replace(/[\\/*?[\]:]/g, '_').trim().substring(0, 26);
+          let safeName = rawName || 'Teacher';
+          let counter = 1;
+          while (usedSheetNames.has(safeName)) {
+            safeName = `${rawName}_${counter++}`;
+          }
+          usedSheetNames.add(safeName);
+          XLSX.utils.book_append_sheet(wb, ws, safeName);
+        }
+      });
+    }
+
+    XLSX.writeFile(wb, `${state.settings.schoolName || 'schedules'}.xlsx`);
+  }
+}
+
+function renderSettings() {
+  return `
+    <div class="fade-in max-w-3xl mx-auto space-y-6">
+      <h2 class="text-2xl font-black text-slate-800 border-r-4 border-slate-700 pr-3">تنظیمات آموزشگاه و پشتیبان‌گیری</h2>
+      <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-6">
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-2">نام مدرسه یا مجتمع آموزشی</label>
+          <div class="flex gap-2">
+            <input type="text" id="setting_school_name" value="${escapeHtml(state.settings.schoolName || '')}" class="flex-1 border rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 font-bold" maxlength="100">
+            <button onclick="saveSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold transition-colors shadow-sm">ذخیره</button>
+          </div>
+        </div>
+        <hr class="border-slate-100">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <button onclick="exportData()" class="flex flex-col items-center justify-center gap-2 p-5 border-2 border-dashed border-blue-200 rounded-2xl hover:bg-blue-50/60 text-blue-700 transition-colors">
+            <svg class="w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span class="font-bold text-sm">دریافت فایل پشتیبان (JSON)</span>
+            <span class="text-[11px] text-slate-400">دانلود تمام کلاس‌ها، اساتید و دروس</span>
+          </button>
+          <label class="flex flex-col items-center justify-center gap-2 p-5 border-2 border-dashed border-emerald-200 rounded-2xl hover:bg-emerald-50/60 text-emerald-700 transition-colors cursor-pointer">
+            <svg class="w-8 h-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            <span class="font-bold text-sm">بازیابی فایل پشتیبان (JSON)</span>
+            <span class="text-[11px] text-slate-400">آپلود و بازگردانی سریع کل اطلاعات</span>
+            <input type="file" class="hidden" accept=".json" onchange="importData(event)">
+          </label>
+        </div>
+        <div class="pt-4 border-t border-slate-100 text-center">
+          <button onclick="resetAllData()" class="text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-6 py-2.5 rounded-xl font-bold text-xs transition-colors">
+            پاک‌سازی و بازنشانی کامل داده‌ها
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function saveSettings() {
+  const name = document.getElementById('setting_school_name').value.trim();
+  if (!name) return showToast('نام مدرسه الزامی است', 'error');
+  state.settings.schoolName = name.slice(0, 100);
+  saveState();
+  showToast('تنظیمات با موفقیت ذخیره شد.', 'success');
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `school_schedule_backup_${Date.now()}.json`;
+  a.click();
+}
+
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (validateStateStructure(data)) {
+        Object.assign(state, data);
+        state.teachers.forEach(t => {
+          if (!isValidAvailability(t.availability)) t.availability = generateDefaultAvailability();
+        });
+        saveState();
+        navigateTo('home');
+        showToast('اطلاعات با موفقیت بازیابی شد.', 'success');
+      } else {
+        showToast('فرمت فایل پشتیبان نامعتبر است.', 'error');
+      }
+    } catch(err) {
+      showToast('خطا در خواندن فایل JSON', 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function resetAllData() {
+  if (confirm('آیا از حذف کامل تمام اطلاعات سامانه اطمینان دارید؟ این عملیات غیرقابل بازگشت است.')) {
+    localStorage.removeItem('school_schedule_data_v2');
+    location.reload();
+  }
+}
+
+window.onload = () => {
+  loadState();
+  navigateTo('home');
+};
+</script>
+</body>
+</html>
