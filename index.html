@@ -5,12 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ساخت هوشمند برنامه کلاسی</title>
 
-<!-- Tailwind CSS Play CDN -->
-<!-- توجه: Play CDN محتوای پویا تولید می‌کند و SRI برای آن کاربرد ندارد. برای محیط تولید، Tailwind را build کنید. -->
+<!-- Tailwind CSS -->
 <script src="https://cdn.tailwindcss.com"></script>
 
 <!-- SheetJS for Excel Import/Export -->
-<!-- SRI: برای افزودن، هش را از https://www.srihash.org/ دریافت کرده و integrity="sha384-..." را اضافه کنید -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
 
 <!-- html2pdf for PDF Export -->
@@ -19,7 +17,6 @@
 <!-- TomSelect for Searchable Dropdowns -->
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet" crossorigin="anonymous">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js" crossorigin="anonymous"></script>
-
 <!-- Vazirmatn Font -->
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin="anonymous">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
@@ -66,12 +63,12 @@
 
   <main class="max-w-6xl mx-auto px-4 py-8" id="app-content"></main>
 
+  <!-- Modal Container -->
   <div id="modal-backdrop" class="fixed inset-0 bg-black/50 hidden z-50 overflow-y-auto justify-center p-4 sm:p-10 fade-in items-start sm:items-center">
     <div id="modal-content" class="bg-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col overflow-visible my-auto"></div>
   </div>
 
 <script>
-// --- 1. DATA & STATE MANAGEMENT ---
 const initialGradeLevels = ['اول', 'دوم', 'سوم', 'چهارم', 'پنجم', 'ششم', 'هفتم', 'هشتم', 'نهم', 'دهم', 'یازدهم', 'دوازدهم'];
 const majorsList = ['عمومی', 'ریاضی فیزیک', 'علوم تجربی', 'علوم انسانی'];
 const DAYS_OF_WEEK = ['شنبه', 'یک‌شنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
@@ -96,12 +93,7 @@ let uiState = {
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 function safeParseInt(val, fallback) {
@@ -256,19 +248,17 @@ function generateDefaultAvailability() {
     return avail;
 }
 
-// --- 2. UTILITIES & UI COMPONENTS ---
-
 function showToast(msg, type = 'info') {
-  const colors = { success: 'bg-green-600', error: 'bg-red-600', info: 'bg-blue-600' };
+  const colors = { success: 'bg-emerald-600', error: 'bg-red-600', info: 'bg-blue-600' };
   const toast = document.createElement('div');
-  toast.className = `${colors[type] || colors.info} text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium fade-in max-w-sm`;
+  toast.className = `${colors[type] || colors.info} text-white px-5 py-3 rounded-xl shadow-lg text-sm font-medium fade-in max-w-sm border border-white/20`;
   toast.textContent = msg; 
   document.getElementById('toast-container').appendChild(toast);
   setTimeout(() => {
     toast.style.transition = 'opacity .3s ease';
     toast.style.opacity = '0';
     setTimeout(() => toast.remove(), 300);
-  }, 3500);
+  }, 4000);
 }
 
 const modalBackdrop = document.getElementById('modal-backdrop');
@@ -282,7 +272,7 @@ function showModal(title, bodyHTML, footerHTML, onOpen = null) {
   modalContent.innerHTML = `
     <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-slate-50 rounded-t-2xl shrink-0">
       <h3 class="font-bold text-lg text-slate-800">${escapeHtml(title)}</h3>
-      <button onclick="hideModal()" class="text-gray-400 hover:text-red-500 transition-colors">
+      <button onclick="hideModal()" class="text-gray-400 hover:text-red-500 transition-colors bg-white p-1 rounded-lg border border-transparent hover:border-red-100 hover:bg-red-50">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
       </button>
     </div>
@@ -301,6 +291,19 @@ function hideModal() {
   modalBackdrop.classList.add('hidden');
   modalBackdrop.classList.remove('flex');
   destroyAllTomSelects();
+}
+
+function showConfirm(message, onConfirm) {
+    const body = `<p class="text-slate-700 font-medium text-lg leading-relaxed mb-2">${escapeHtml(message)}</p>`;
+    const footer = `
+        <button onclick="hideModal()" class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-slate-700 rounded-xl transition-colors font-semibold">انصراف</button>
+        <button id="confirm-btn" class="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-md transition-colors font-semibold">بله، مطمئنم</button>
+    `;
+    showModal('تایید عملیات', body, footer);
+    document.getElementById('confirm-btn').onclick = () => {
+        hideModal();
+        onConfirm();
+    };
 }
 
 function navigateTo(view) {
@@ -369,9 +372,6 @@ function changeSort(section, val) {
   navigateTo(section);
 }
 
-// --- 3. VIEWS ---
-
-// HOME VIEW
 function renderHome() {
   const menus = [
     { id: 'settings', title: 'تنظیمات', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z', color: 'bg-gray-500' },
@@ -396,7 +396,6 @@ function renderHome() {
   return html;
 }
 
-// SUBJECTS VIEW
 function renderSubjects() {
   const grouped = {};
   const sortedData = sortDataList(state.subjects, uiState.sortRules.subjects);
@@ -495,13 +494,14 @@ function renderSubjects() {
 }
 
 function deleteMajor(grade, major) {
-  if(!confirm(`آیا از حذف کامل رشته "${major}" در پایه "${grade}" و تمامی دروس آن اطمینان دارید؟`)) return;
-  const ids = state.subjects.filter(s => s.grade === grade && s.major === major).map(s => s.id);
-  state.subjects = state.subjects.filter(s => !(s.grade === grade && s.major === major));
-  state.teachers.forEach(t => t.subjects = t.subjects.filter(sid => !ids.includes(sid)));
-  state.classes.forEach(c => c.subjects = c.subjects.filter(cs => !ids.includes(cs.subjectId)));
-  state.classes = state.classes.filter(c => !(c.grade === grade && c.major === major));
-  saveState(); navigateTo('subjects'); showToast(`رشته ${major} در پایه ${grade} حذف شد.`, 'success');
+  showConfirm(`آیا از حذف کامل رشته "${major}" در پایه "${grade}" و تمامی دروس آن اطمینان دارید؟`, () => {
+      const ids = state.subjects.filter(s => s.grade === grade && s.major === major).map(s => s.id);
+      state.subjects = state.subjects.filter(s => !(s.grade === grade && s.major === major));
+      state.teachers.forEach(t => t.subjects = t.subjects.filter(sid => !ids.includes(sid)));
+      state.classes.forEach(c => c.subjects = c.subjects.filter(cs => !ids.includes(cs.subjectId)));
+      state.classes = state.classes.filter(c => !(c.grade === grade && c.major === major));
+      saveState(); navigateTo('subjects'); showToast(`رشته ${major} در پایه ${grade} حذف شد.`, 'success');
+  });
 }
 
 function editSubjectName(id) {
@@ -529,8 +529,8 @@ function editSubjectName(id) {
         </div>
       </div>`;
     showModal('ویرایش درس', body,
-      `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 rounded-xl">انصراف</button>
-       <button onclick="saveSubjectEdit('${escapeHtml(id)}')" class="px-5 py-2 bg-indigo-600 text-white rounded-xl">ذخیره</button>`);
+      `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 transition-colors rounded-xl font-semibold">انصراف</button>
+       <button onclick="saveSubjectEdit('${escapeHtml(id)}')" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 transition-colors text-white rounded-xl shadow-md font-semibold">ذخیره</button>`);
 }
 
 function saveSubjectEdit(id) {
@@ -548,26 +548,30 @@ function saveSubjectEdit(id) {
 }
 
 function deleteGrade(grade) {
-  if(!confirm(`آیا از حذف کامل پایه "${grade}" و تمامی دروس آن اطمینان دارید؟`)) return;
-  const ids = state.subjects.filter(s => s.grade === grade).map(s => s.id);
-  state.subjects = state.subjects.filter(s => s.grade !== grade);
-  state.teachers.forEach(t => t.subjects = t.subjects.filter(sid => !ids.includes(sid)));
-  state.classes.forEach(c => c.subjects = c.subjects.filter(cs => !ids.includes(cs.subjectId)));
-  state.classes = state.classes.filter(c => c.grade !== grade);
-  state.gradeLevels = state.gradeLevels.filter(g => g !== grade);
-  saveState(); navigateTo('subjects'); showToast(`پایه ${grade} حذف شد.`, 'success');
+  showConfirm(`آیا از حذف کامل پایه "${grade}" و تمامی دروس آن اطمینان دارید؟`, () => {
+      const ids = state.subjects.filter(s => s.grade === grade).map(s => s.id);
+      state.subjects = state.subjects.filter(s => s.grade !== grade);
+      state.teachers.forEach(t => t.subjects = t.subjects.filter(sid => !ids.includes(sid)));
+      state.classes.forEach(c => c.subjects = c.subjects.filter(cs => !ids.includes(cs.subjectId)));
+      state.classes = state.classes.filter(c => c.grade !== grade);
+      state.gradeLevels = state.gradeLevels.filter(g => g !== grade);
+      saveState(); navigateTo('subjects'); showToast(`پایه ${grade} حذف شد.`, 'success');
+  });
 }
+
 function deleteSubject(id) {
-  if(!confirm('حذف درس؟')) return;
-  state.subjects = state.subjects.filter(s => s.id !== id);
-  state.teachers.forEach(t => t.subjects = t.subjects.filter(sid => sid !== id));
-  state.classes.forEach(c => c.subjects = c.subjects.filter(cs => cs.subjectId !== id));
-  saveState(); navigateTo('subjects'); showToast('درس حذف شد', 'success');
+  showConfirm('آیا از حذف این درس اطمینان دارید؟ تمامی ارجاعات به آن پاک خواهد شد.', () => {
+      state.subjects = state.subjects.filter(s => s.id !== id);
+      state.teachers.forEach(t => t.subjects = t.subjects.filter(sid => sid !== id));
+      state.classes.forEach(c => c.subjects = c.subjects.filter(cs => cs.subjectId !== id));
+      saveState(); navigateTo('subjects'); showToast('درس حذف شد', 'success');
+  });
 }
+
 function openAddSubjectModal() {
   const body = `
     <div class="space-y-4">
-      <div><label class="block text-sm font-medium mb-1">نام درس</label><input type="text" id="new_sub_name" class="w-full border rounded-lg px-3 py-2 outline-none" maxlength="100"></div>
+      <div><label class="block text-sm font-medium mb-1">نام درس</label><input type="text" id="new_sub_name" class="w-full border rounded-lg px-3 py-2 outline-none focus:border-indigo-500" maxlength="100"></div>
       <div class="grid grid-cols-2 gap-4">
         <div><label class="block text-sm font-medium mb-1">پایه تحصیلی</label><select id="new_sub_grade" class="searchable w-full">${state.gradeLevels.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select></div>
         <div><label class="block text-sm font-medium mb-1">رشته</label><select id="new_sub_major" class="searchable w-full">${majorsList.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</select></div>
@@ -583,8 +587,9 @@ function openAddSubjectModal() {
         </div>
       </div>
     </div>`;
-  showModal('افزودن درس جدید', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 rounded-xl">انصراف</button><button onclick="saveNewSubject()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl">ذخیره</button>`);
+  showModal('افزودن درس جدید', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 font-semibold rounded-xl transition-colors">انصراف</button><button onclick="saveNewSubject()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 font-semibold text-white rounded-xl shadow-md transition-colors">ذخیره</button>`);
 }
+
 function saveNewSubject() {
   const name = document.getElementById('new_sub_name').value.trim();
   const grade = document.getElementById('new_sub_grade').value;
@@ -599,18 +604,20 @@ function saveNewSubject() {
   state.subjects.push({ id: generateId(), name, grade, major, difficulty, preferredSlot, createdAt: Date.now() });
   saveState(); hideModal(); navigateTo('subjects'); showToast('درس اضافه شد', 'success');
 }
+
 function openImportSubjectsModal() {
   const body = `<div class="space-y-4">
     <div class="bg-indigo-50 text-indigo-800 text-xs p-3 rounded-lg border border-indigo-100">
       ستون‌ها به‌ترتیب: <b>نام درس</b>، <b>پایه</b>، <b>رشته</b> و ستون‌های اختیاری <b>دشواری (عدد ۱ تا ۵)</b> و <b>زمان ترجیحی (صبح / آخر / دلخواه)</b>. مقادیر خالی از پیش‌فرض استفاده می‌کنند.
     </div>
-    <input type="file" id="import_sub_file" accept=".xlsx" class="w-full border p-2 rounded">
+    <input type="file" id="import_sub_file" accept=".xlsx" class="w-full border p-2 rounded bg-white">
     <div class="grid grid-cols-2 gap-4">
-      <div><label class="block text-sm">پایه پیش‌فرض</label><select id="import_sub_grade" class="searchable w-full">${state.gradeLevels.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select></div>
-      <div><label class="block text-sm">رشته پیش‌فرض</label><select id="import_sub_major" class="searchable w-full">${majorsList.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</select></div>
+      <div><label class="block text-sm font-medium mb-1">پایه پیش‌فرض</label><select id="import_sub_grade" class="searchable w-full">${state.gradeLevels.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select></div>
+      <div><label class="block text-sm font-medium mb-1">رشته پیش‌فرض</label><select id="import_sub_major" class="searchable w-full">${majorsList.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</select></div>
     </div></div>`;
-  showModal('افزودن از اکسل', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 rounded-xl">انصراف</button><button onclick="processSubjectsImport()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl">بارگذاری</button>`);
+  showModal('افزودن از اکسل', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 transition-colors font-semibold rounded-xl">انصراف</button><button onclick="processSubjectsImport()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 font-semibold text-white rounded-xl shadow-md transition-colors">بارگذاری</button>`);
 }
+
 function processSubjectsImport() {
   const file = document.getElementById('import_sub_file').files[0];
   if(!file) return showToast('لطفا یک فایل انتخاب کنید', 'error');
@@ -646,7 +653,6 @@ function processSubjectsImport() {
   reader.readAsArrayBuffer(file);
 }
 
-// TEACHERS VIEW
 function renderTeachers() {
   const sortedTeachers = sortDataList(state.teachers, uiState.sortRules.teachers);
 
@@ -656,7 +662,7 @@ function renderTeachers() {
         <h2 class="text-2xl font-bold text-slate-800 border-r-4 border-emerald-500 pr-3">مدیریت اساتید</h2>
         <div class="flex flex-wrap items-center gap-2">
           ${renderSortToggle('teachers', uiState.sortRules.teachers)}
-          <button onclick="toggleTeacherView()" class="p-2 border border-slate-300 rounded-lg bg-white shadow-sm" title="تغییر نحوه نمایش">
+          <button onclick="toggleTeacherView()" class="p-2 border border-slate-300 rounded-lg bg-white shadow-sm hover:bg-slate-50" title="تغییر نحوه نمایش">
              <svg class="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${uiState.teacherViewMode === 'grid' ? 'M4 6h16M4 10h16M4 14h16M4 18h16' : 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z'}"/></svg>
           </button>
           <button onclick="openImportTeachersModal()" class="bg-white border-2 border-emerald-600 text-emerald-700 hover:bg-emerald-50 px-4 py-2 rounded-xl font-semibold shadow-sm transition-colors flex items-center gap-2">
@@ -684,7 +690,7 @@ function renderTeachers() {
               <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-lg">${escapeHtml(teacher.name.charAt(0))}</div>
               <h3 class="font-bold text-lg text-slate-800">${escapeHtml(teacher.name)}</h3>
             </div>
-            <button onclick="deleteTeacher('${escapeHtml(teacher.id)}')" class="text-gray-300 hover:text-red-500"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            <button onclick="deleteTeacher('${escapeHtml(teacher.id)}')" class="text-gray-300 hover:text-red-500 transition-colors"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
           </div>
           <div class="text-sm text-gray-500 line-clamp-2" title="${escapeHtml(subjectNames.join(', '))}">
             ${subjectNames.length > 0 ? escapeHtml(subjectNames.join('، ')) : 'بدون درس'}
@@ -697,15 +703,16 @@ function renderTeachers() {
     html += `
       <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <table class="w-full text-right text-sm">
-          <thead class="bg-slate-50 border-b"><tr><th class="p-4">نام استاد</th><th class="p-4">تعداد دروس</th><th class="p-4">عملیات</th></tr></thead>
+          <thead class="bg-slate-50 border-b"><tr><th class="p-4">نام استاد</th><th class="p-4">تعداد دروس</th><th class="p-4 text-center">عملیات</th></tr></thead>
           <tbody class="divide-y">
             ${sortedTeachers.map(t => `
-              <tr class="hover:bg-slate-50">
+              <tr class="hover:bg-slate-50 transition-colors">
                 <td class="p-4 font-bold text-slate-700">${escapeHtml(t.name)}</td>
                 <td class="p-4 text-slate-500">${t.subjects.length} درس</td>
-                <td class="p-4 flex gap-2">
-                   <button onclick="openTeacherModal('${escapeHtml(t.id)}')" class="text-emerald-600 hover:underline">تنظیمات و برنامه</button>
-                   <button onclick="deleteTeacher('${escapeHtml(t.id)}')" class="text-red-500 hover:underline">حذف</button>
+                <td class="p-4 flex gap-2 justify-center">
+                   <button onclick="openTeacherModal('${escapeHtml(t.id)}')" class="text-emerald-600 hover:underline font-medium">تنظیمات و برنامه</button>
+                   <span class="text-gray-300">|</span>
+                   <button onclick="deleteTeacher('${escapeHtml(t.id)}')" class="text-red-500 hover:underline font-medium">حذف</button>
                 </td>
               </tr>
             `).join('')}
@@ -744,7 +751,7 @@ function openTeacherModal(teacherId = null) {
               ${Array.from({length:MAX_PERIODS}).map((_,i)=>`
                 <th class="p-2 border-l">
                   زنگ ${i+1}
-                  <div class="mt-1"><input type="checkbox" onchange="toggleTeacherAvailCol(${i}, this.checked)" title="تغییر وضعیت کل زنگ" class="w-4 h-4 cursor-pointer" checked></div>
+                  <div class="mt-1 flex justify-center"><input type="checkbox" onchange="toggleTeacherAvailCol(${i}, this.checked)" title="تغییر وضعیت کل زنگ" class="w-4 h-4 cursor-pointer" checked></div>
                 </th>`).join('')}
             </tr>
           </thead>
@@ -782,7 +789,7 @@ function openTeacherModal(teacherId = null) {
           ${state.subjects.map(s => {
              const isAssignedToMe = teacher.subjects.includes(s.id);
              const isAssignedToOther = state.teachers.some(t => t.id !== teacherId && t.subjects.includes(s.id));
-             if (!isAssignedToMe && isAssignedToOther) return '';
+             if (!isAssignedToMe && isAssignedToOther) return ''; // Hide if assigned to another teacher
              
              const isSelected = isAssignedToMe ? 'selected' : '';
              return `<option value="${escapeHtml(s.id)}" ${isSelected}>${escapeHtml(s.name)} (${escapeHtml(s.grade)} - ${escapeHtml(s.major)})</option>`;
@@ -793,8 +800,8 @@ function openTeacherModal(teacherId = null) {
     </div>`;
 
   showModal(teacherId ? 'ویرایش استاد' : 'افزودن استاد جدید', body,
-    `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 rounded-xl">انصراف</button>
-     <button onclick="saveTeacher('${escapeHtml(teacherId || '')}')" class="px-5 py-2 bg-emerald-600 text-white rounded-xl shadow-md">ذخیره اطلاعات</button>`);
+    `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 transition-colors font-semibold rounded-xl">انصراف</button>
+     <button onclick="saveTeacher('${escapeHtml(teacherId || '')}')" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 transition-colors text-white rounded-xl shadow-md font-semibold">ذخیره اطلاعات</button>`);
 }
 
 function openImportTeachersModal() {
@@ -805,7 +812,7 @@ function openImportTeachersModal() {
       </div>
       <input type="file" id="import_teacher_file" accept=".xlsx" class="w-full border p-2 rounded-lg bg-white">
     </div>`;
-  showModal('افزودن اساتید از فایل اکسل', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 rounded-xl">انصراف</button><button onclick="processTeachersImport()" class="px-5 py-2 bg-emerald-600 text-white rounded-xl shadow-md">بارگذاری</button>`);
+  showModal('افزودن اساتید از فایل اکسل', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 transition-colors font-semibold rounded-xl">انصراف</button><button onclick="processTeachersImport()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 transition-colors text-white rounded-xl shadow-md font-semibold">بارگذاری</button>`);
 }
 
 function processTeachersImport() {
@@ -889,13 +896,13 @@ function saveTeacher(id) {
 }
 
 function deleteTeacher(id) {
-  if(!confirm('حذف استاد؟')) return;
-  state.teachers = state.teachers.filter(t => t.id !== id);
-  state.classes.forEach(c => c.subjects.forEach(cs => { if(cs.teacherId === id) cs.teacherId = null; }));
-  saveState(); navigateTo('teachers');
+  showConfirm('آیا از حذف این استاد اطمینان دارید؟ برنامه‌های مرتبط با وی لغو خواهد شد.', () => {
+      state.teachers = state.teachers.filter(t => t.id !== id);
+      state.classes.forEach(c => c.subjects.forEach(cs => { if(cs.teacherId === id) cs.teacherId = null; }));
+      saveState(); navigateTo('teachers'); showToast('استاد حذف شد', 'success');
+  });
 }
 
-// CLASSES VIEW
 function renderClasses() {
   const sortedClasses = sortDataList(state.classes, uiState.sortRules.classes);
   let html = `
@@ -930,7 +937,7 @@ function renderClasses() {
           </div>
           <div class="flex gap-1">
              <button onclick="duplicateClass('${escapeHtml(cls.id)}')" title="کپی کردن کلاس" class="text-gray-400 hover:text-blue-500 p-1"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg></button>
-             <button onclick="deleteClass('${escapeHtml(cls.id)}')" class="text-gray-400 hover:text-red-500 p-1"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+             <button onclick="deleteClass('${escapeHtml(cls.id)}')" title="حذف کلاس" class="text-gray-400 hover:text-red-500 p-1"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
           </div>
         </div>
         <div class="text-xs text-slate-600 bg-blue-50 p-3 rounded-xl border border-blue-100 space-y-1">
@@ -938,7 +945,7 @@ function renderClasses() {
            <div class="flex justify-between"><span>روزهای فعال:</span> <b class="text-blue-700">${cls.config?.activeDays?.length || 5} روز</b></div>
            <div class="flex justify-between"><span>زنگ در روز:</span> <b class="text-blue-700">${cls.config?.periodsCount || 5} زنگ</b></div>
         </div>
-        <button onclick="navigateTo('class_edit_${escapeHtml(cls.id)}')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors mt-auto">
+        <button onclick="navigateTo('class_edit_${escapeHtml(cls.id)}')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors mt-auto shadow-sm">
           تنظیم دروس و اساتید
         </button>
       </div>
@@ -952,13 +959,13 @@ function renderClasses() {
 function openAddClassModal() {
   const body = `
     <div class="space-y-4">
-      <div><label class="block text-sm font-medium mb-1">نام کلاس</label><input type="text" id="new_class_name" class="w-full border rounded-lg px-3 py-2 outline-none" maxlength="100"></div>
+      <div><label class="block text-sm font-medium mb-1">نام کلاس</label><input type="text" id="new_class_name" class="w-full border rounded-lg px-3 py-2 outline-none focus:border-blue-500" maxlength="100"></div>
       <div class="grid grid-cols-2 gap-4">
         <div><label class="block text-sm font-medium mb-1">پایه تحصیلی</label><select id="new_class_grade" class="searchable w-full">${state.gradeLevels.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select></div>
         <div><label class="block text-sm font-medium mb-1">رشته</label><select id="new_class_major" class="searchable w-full">${majorsList.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</select></div>
       </div>
     </div>`;
-  showModal('افزودن کلاس', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 rounded-xl">انصراف</button><button onclick="saveNewClass()" class="px-5 py-2 bg-blue-600 text-white rounded-xl">ایجاد</button>`);
+  showModal('افزودن کلاس', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 transition-colors font-semibold rounded-xl">انصراف</button><button onclick="saveNewClass()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 transition-colors text-white rounded-xl shadow-md font-semibold">ایجاد</button>`);
 }
 
 function saveNewClass() {
@@ -996,10 +1003,10 @@ function duplicateClass(id) {
 }
 
 function deleteClass(id) {
-  if(!confirm('حذف کلاس؟')) return;
-  state.classes = state.classes.filter(c => c.id !== id);
-  // Clean up any stray jointIds this might have caused
-  saveState(); navigateTo('classes'); showToast('کلاس حذف شد', 'success');
+  showConfirm('آیا از حذف کامل این کلاس و برنامه آن اطمینان دارید؟', () => {
+      state.classes = state.classes.filter(c => c.id !== id);
+      saveState(); navigateTo('classes'); showToast('کلاس حذف شد', 'success');
+  });
 }
 
 function openJointConfigModal(classId, subIndex) {
@@ -1009,8 +1016,8 @@ function openJointConfigModal(classId, subIndex) {
     const jointId = cSub.jointId || generateId();
 
     let html = `<div class="space-y-4">
-        <div class="bg-purple-50 text-purple-800 text-sm p-3 rounded-xl border border-purple-100">
-           دروسی که انتخاب کنید، در زمان‌بندی به‌صورت مشترک و یکپارچه در <b>یک روز و یک زنگ مشترک</b> و با <b>یک استاد یکسان</b> قرار خواهند گرفت.
+        <div class="bg-purple-50 text-purple-800 text-sm p-3 rounded-xl border border-purple-100 leading-relaxed">
+           دروسی که انتخاب کنید، در زمان‌بندی به‌صورت یکپارچه در <b>یک روز و یک زنگ مشترک</b> و با <b>یک استاد یکسان</b> قرار خواهند گرفت.
         </div>
         <p class="text-sm text-gray-600 font-bold mb-1">انتخاب دروس سایر کلاس‌ها:</p>
         <div class="max-h-60 overflow-y-auto border rounded-lg p-2 space-y-1 custom-scrollbar">`;
@@ -1035,7 +1042,7 @@ function openJointConfigModal(classId, subIndex) {
     if(!foundOther) html += `<div class="text-center py-4 text-gray-400 text-sm">کلاس دیگری ثبت نشده است.</div>`;
     html += `</div></div>`;
     
-    showModal('تنظیم برگزاری مشترک درس', html, `<button onclick="hideModal(); navigateTo('class_edit_${escapeHtml(classId)}')" class="px-5 py-2 bg-gray-800 text-white rounded-xl">بستن</button>`);
+    showModal('تنظیم برگزاری مشترک درس', html, `<button onclick="hideModal(); navigateTo('class_edit_${escapeHtml(classId)}')" class="px-5 py-2 bg-gray-800 hover:bg-gray-900 transition-colors text-white font-semibold rounded-xl">بستن</button>`);
 }
 
 window.toggleJointStatus = function(c1, idx1, c2, idx2, isChecked, jointId) {
@@ -1055,7 +1062,6 @@ window.toggleJointStatus = function(c1, idx1, c2, idx2, isChecked, jointId) {
     openJointConfigModal(c1, idx1);
 };
 
-// CLASS SUBJECTS EDITOR
 function renderClassEditor(classId) {
   const cls = state.classes.find(c => c.id === classId);
   if(!cls) return renderClasses();
@@ -1063,23 +1069,23 @@ function renderClassEditor(classId) {
   const capacity = getClassCapacity(cls);
   const usedSlots = getClassUsedSlots(cls);
   const capacityWarning = usedSlots > capacity
-    ? `<div class="bg-red-50 text-red-700 text-sm p-3 rounded-xl border border-red-200 mb-4">⚠️ ظرفیت کلاس (${capacity} زنگ) کمتر از کل زنگ‌های دروس (${usedSlots} زنگ) است. همه دروس ممکن است در برنامه جای نگیرند.</div>`
+    ? `<div class="bg-red-50 text-red-700 text-sm p-3 rounded-xl border border-red-200 mb-4 font-medium">⚠️ ظرفیت کلاس (${capacity} زنگ) کمتر از کل زنگ‌های دروس (${usedSlots} زنگ) است. همه دروس ممکن است در برنامه جای نگیرند.</div>`
     : '';
 
   let html = `
     <div class="fade-in pb-20">
       <div class="mb-6 flex flex-wrap justify-between items-center gap-4">
         <div class="flex items-center gap-4">
-          <button onclick="navigateTo('classes')" class="p-2 bg-white rounded-full shadow-sm hover:bg-slate-50"><svg class="w-6 h-6 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></button>
+          <button onclick="navigateTo('classes')" class="p-2 bg-white rounded-full shadow-sm hover:bg-slate-50 transition-colors border border-slate-200"><svg class="w-6 h-6 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></button>
           <div>
             <div class="flex items-center gap-2">
                 <h2 class="text-2xl font-bold text-slate-800 border-r-4 border-blue-500 pr-3" id="class-title-text">${escapeHtml(cls.name)}</h2>
-                <button onclick="editClassName('${escapeHtml(cls.id)}')" class="text-gray-400 hover:text-blue-600 p-1"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+                <button onclick="editClassName('${escapeHtml(cls.id)}')" class="text-gray-400 hover:text-blue-600 p-1 transition-colors"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
             </div>
-            <p class="text-sm text-slate-500 mt-1 pr-4">پایه ${escapeHtml(cls.grade)} | رشته ${escapeHtml(cls.major)}</p>
+            <p class="text-sm text-slate-500 mt-1 pr-4 font-medium">پایه ${escapeHtml(cls.grade)} | رشته ${escapeHtml(cls.major)}</p>
           </div>
         </div>
-        <button onclick="openClassConfigModal('${escapeHtml(cls.id)}')" class="bg-white border-2 border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2">
+        <button onclick="openClassConfigModal('${escapeHtml(cls.id)}')" class="bg-white border-2 border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 transition-colors">
            تنظیمات زمانی کلاس (روزها و زنگ‌ها)
         </button>
       </div>
@@ -1127,10 +1133,10 @@ function renderClassEditor(classId) {
       <tr class="hover:bg-slate-50 transition-colors">
         <td class="p-4 font-bold text-slate-700 text-sm flex items-center gap-1">${escapeHtml(mainSub.name)} ${jointBadge}</td>
         <td class="p-4 text-center">
-          <input type="number" min="1" max="${MAX_PERIODS_PER_SUBJECT}" value="${cSub.periods}" onchange="updateClassSubject('${escapeHtml(cls.id)}', ${index}, 'periods', this.value)" class="w-16 text-center border rounded-lg py-1 outline-none focus:border-blue-500 bg-white shadow-sm text-sm">
+          <input type="number" min="1" max="${MAX_PERIODS_PER_SUBJECT}" value="${cSub.periods}" onchange="updateClassSubject('${escapeHtml(cls.id)}', ${index}, 'periods', this.value)" class="w-16 text-center border rounded-lg py-1 outline-none focus:border-blue-500 bg-white shadow-sm text-sm transition-colors">
         </td>
         <td class="p-4">
-          <select onchange="updateClassSubject('${escapeHtml(cls.id)}', ${index}, 'type', this.value)" class="w-full border rounded-lg px-2 py-1 outline-none focus:border-blue-500 bg-white shadow-sm text-sm">
+          <select onchange="updateClassSubject('${escapeHtml(cls.id)}', ${index}, 'type', this.value)" class="w-full border rounded-lg px-2 py-1 outline-none focus:border-blue-500 bg-white shadow-sm text-sm transition-colors">
             <option value="عادی" ${cSub.type === 'عادی' ? 'selected' : ''}>عادی</option>
             <option value="تخصصی" ${cSub.type === 'تخصصی' ? 'selected' : ''}>تخصصی</option>
           </select>
@@ -1154,10 +1160,10 @@ function renderClassEditor(classId) {
 
   html += `</tbody></table></div>
         <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end flex-wrap gap-3">
-           <button onclick="addAllGradeSubjectsToClass('${escapeHtml(cls.id)}')" class="text-emerald-600 hover:bg-emerald-100 px-4 py-2 rounded-xl font-semibold transition-colors flex items-center gap-1 text-sm border border-emerald-200">
+           <button onclick="addAllGradeSubjectsToClass('${escapeHtml(cls.id)}')" class="text-emerald-600 hover:bg-emerald-100 px-4 py-2 rounded-xl font-bold transition-colors flex items-center gap-1 text-sm border border-emerald-200">
              افزودن خودکار تمام دروس پایه
            </button>
-           <button onclick="openAddSubjectToClassModal('${escapeHtml(cls.id)}')" class="text-blue-600 hover:bg-blue-100 px-4 py-2 rounded-xl font-semibold transition-colors flex items-center gap-1 text-sm border border-blue-200">
+           <button onclick="openAddSubjectToClassModal('${escapeHtml(cls.id)}')" class="text-blue-600 hover:bg-blue-100 px-4 py-2 rounded-xl font-bold transition-colors flex items-center gap-1 text-sm border border-blue-200">
              افزودن تک درس به کلاس
            </button>
         </div></div></div>`;
@@ -1193,13 +1199,33 @@ function addAllGradeSubjectsToClass(classId) {
 
 function editClassName(id) {
     const cls = state.classes.find(c => c.id === id);
-    if(cls) {
-        const newName = prompt('نام جدید کلاس را وارد کنید:', cls.name);
-        if(newName && newName.trim()) {
-            cls.name = newName.trim().slice(0, 100);
-            saveState(); navigateTo(`class_edit_${id}`);
+    if(!cls) return;
+    const body = `
+        <div>
+            <label class="block text-sm font-bold mb-2">نام جدید کلاس</label>
+            <input type="text" id="prompt_input" value="${escapeHtml(cls.name)}" class="w-full border border-slate-300 rounded-xl px-4 py-3 outline-none focus:border-blue-500 shadow-sm transition-colors">
+        </div>
+    `;
+    const footer = `
+        <button onclick="hideModal()" class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 transition-colors rounded-xl font-semibold text-slate-700">انصراف</button>
+        <button id="prompt-btn" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 transition-colors text-white rounded-xl shadow-md font-semibold">ذخیره</button>
+    `;
+    showModal('ویرایش نام کلاس', body, footer);
+    
+    setTimeout(() => {
+        const inp = document.getElementById('prompt_input');
+        if (inp) { inp.focus(); inp.select(); }
+    }, 100);
+    
+    document.getElementById('prompt-btn').onclick = () => {
+        const newName = document.getElementById('prompt_input').value.trim();
+        if(newName) {
+            cls.name = newName.slice(0, 100);
+            saveState(); hideModal(); navigateTo('class_edit_' + id);
+        } else {
+            showToast('نام نمی‌تواند خالی باشد', 'error');
         }
-    }
+    };
 }
 
 function assignTeacherToClass(classId, subIndex, teacherId) {
@@ -1287,19 +1313,14 @@ function updateClassSubject(classId, subIndex, field, value) {
 }
 
 function removeClassSubject(classId, subIndex) {
-  if(!confirm('حذف درس؟')) return;
-  const cls = state.classes.find(c => c.id === classId);
-  if(cls) {
-      const jointId = cls.subjects[subIndex].jointId;
-      cls.subjects.splice(subIndex, 1);
-      if(jointId) {
-          const anyoneElse = state.classes.some(c => c.subjects.some(cs => cs.jointId === jointId));
-          if(!anyoneElse) {
-              // clear if no one uses it (automatically handled)
-          }
+  showConfirm('آیا از حذف این درس از برنامه کلاس اطمینان دارید؟', () => {
+      const cls = state.classes.find(c => c.id === classId);
+      if(cls) {
+          const jointId = cls.subjects[subIndex].jointId;
+          cls.subjects.splice(subIndex, 1);
       }
-  }
-  saveState(); navigateTo(`class_edit_${classId}`);
+      saveState(); navigateTo(`class_edit_${classId}`);
+  });
 }
 
 function openAddSubjectToClassModal(classId) {
@@ -1321,17 +1342,17 @@ function openAddSubjectToClassModal(classId) {
       <div class="bg-blue-50 text-blue-800 text-xs p-2 rounded">در این لیست فقط دروس مرتبط با ${escapeHtml(cls.grade)} (${escapeHtml(cls.major)}) نمایش داده می‌شود.</div>
       <div><label class="block text-sm font-medium mb-1">انتخاب درس</label>${selectHtml}</div>
       <div class="grid grid-cols-2 gap-4">
-        <div><label class="block text-sm font-medium mb-1">زنگ در هفته</label><input type="number" id="new_csub_periods" value="2" min="1" max="${MAX_PERIODS_PER_SUBJECT}" class="w-full border rounded-lg px-3 py-2"></div>
-        <div><label class="block text-sm font-medium mb-1">نوع</label><select id="new_csub_type" class="w-full border rounded-lg px-3 py-2"><option value="عادی">عادی</option><option value="تخصصی">تخصصی</option></select></div>
+        <div><label class="block text-sm font-medium mb-1">زنگ در هفته</label><input type="number" id="new_csub_periods" value="2" min="1" max="${MAX_PERIODS_PER_SUBJECT}" class="w-full border rounded-lg px-3 py-2 outline-none focus:border-blue-500"></div>
+        <div><label class="block text-sm font-medium mb-1">نوع</label><select id="new_csub_type" class="w-full border rounded-lg px-3 py-2 outline-none focus:border-blue-500"><option value="عادی">عادی</option><option value="تخصصی">تخصصی</option></select></div>
       </div>
       <div>
-        <label class="flex items-center gap-2 p-2.5 border rounded-lg bg-white cursor-pointer hover:bg-slate-50 text-sm">
+        <label class="flex items-center gap-2 p-2.5 border rounded-lg bg-white cursor-pointer hover:bg-slate-50 text-sm transition-colors">
           <input type="checkbox" id="new_csub_double" class="w-4 h-4 text-blue-600 rounded cursor-pointer">
           <span>زنگ پیوسته (دو زنگ پشت‌سرهم — مناسب آزمایشگاه)</span>
         </label>
       </div>
     </div>`;
-  showModal('افزودن درس', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 rounded-xl">انصراف</button><button onclick="addSubjectToClass('${escapeHtml(classId)}')" class="px-5 py-2 bg-blue-600 text-white rounded-xl">افزودن</button>`);
+  showModal('افزودن درس', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 transition-colors font-semibold rounded-xl">انصراف</button><button onclick="addSubjectToClass('${escapeHtml(classId)}')" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 transition-colors text-white rounded-xl shadow-md font-semibold">افزودن</button>`);
 }
 
 function addSubjectToClass(classId) {
@@ -1365,9 +1386,9 @@ function openClassConfigModal(classId) {
   const cfg = cls.config || { activeDays: [0,1,2,3,4], periodsCount: 5, periodDuration: 45 };
 
   const daysHtml = DAYS_OF_WEEK.map((d, i) => `
-    <label class="flex items-center gap-2 p-2 border rounded-lg bg-white cursor-pointer hover:bg-slate-50">
-        <input type="checkbox" id="cfg_day_${i}" value="${i}" class="w-4 h-4 text-blue-600" ${cfg.activeDays.includes(i) ? 'checked' : ''}>
-        <span class="text-sm">${escapeHtml(d)}</span>
+    <label class="flex items-center gap-2 p-2 border rounded-lg bg-white cursor-pointer hover:bg-slate-50 transition-colors">
+        <input type="checkbox" id="cfg_day_${i}" value="${i}" class="w-4 h-4 text-blue-600 cursor-pointer" ${cfg.activeDays.includes(i) ? 'checked' : ''}>
+        <span class="text-sm font-medium">${escapeHtml(d)}</span>
     </label>
   `).join('');
 
@@ -1380,16 +1401,16 @@ function openClassConfigModal(classId) {
       <div class="grid grid-cols-2 gap-4 border-t pt-4">
          <div>
             <label class="block text-sm font-bold mb-1">تعداد زنگ در روز</label>
-            <input type="number" id="cfg_periods" value="${cfg.periodsCount}" min="1" max="${MAX_PERIODS}" class="w-full border rounded-lg px-3 py-2 outline-none">
+            <input type="number" id="cfg_periods" value="${cfg.periodsCount}" min="1" max="${MAX_PERIODS}" class="w-full border rounded-lg px-3 py-2 outline-none focus:border-blue-500 transition-colors">
          </div>
          <div>
             <label class="block text-sm font-bold mb-1">مدت زمان هر زنگ (دقیقه)</label>
-            <input type="number" id="cfg_duration" value="${cfg.periodDuration}" min="1" max="${MAX_PERIOD_DURATION}" class="w-full border rounded-lg px-3 py-2 outline-none">
+            <input type="number" id="cfg_duration" value="${cfg.periodDuration}" min="1" max="${MAX_PERIOD_DURATION}" class="w-full border rounded-lg px-3 py-2 outline-none focus:border-blue-500 transition-colors">
          </div>
       </div>
     </div>`;
 
-  showModal('تنظیمات زمانی کلاس', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 rounded-xl">انصراف</button><button onclick="saveClassConfig('${escapeHtml(classId)}')" class="px-5 py-2 bg-blue-600 text-white rounded-xl">ذخیره</button>`);
+  showModal('تنظیمات زمانی کلاس', body, `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 transition-colors font-semibold rounded-xl">انصراف</button><button onclick="saveClassConfig('${escapeHtml(classId)}')" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 transition-colors text-white rounded-xl shadow-md font-semibold">ذخیره</button>`);
 }
 
 function saveClassConfig(classId) {
@@ -1465,15 +1486,14 @@ function getImpossibleLessons() {
     return impossible;
 }
 
-// SMART SCHEDULER VIEW
 function renderScheduler() {
     const imp = getImpossibleLessons();
     let impHtml = '';
     if (Object.keys(imp).length > 0) {
-        impHtml = `<div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+        impHtml = `<div class="bg-red-50 border border-red-200 rounded-xl p-5 mb-6">
             <h3 class="font-bold text-red-700 mb-2">⚠️ خطای قطعی: دروس غیرقابل زمان‌بندی</h3>
             <p class="text-sm text-red-600 mb-3">زمان‌های فعال کلاس با زمان‌های آزاد استاد هم‌پوشانی ندارد. این دروس به‌هیچ‌وجه در برنامه جای نخواهند گرفت:</p>
-            <ul class="list-disc list-inside text-sm text-red-700 space-y-1">
+            <ul class="list-disc list-inside text-sm text-red-700 space-y-1 font-medium">
                 ${Object.entries(imp).map(([grade, list]) => `<li><b>پایه ${escapeHtml(grade)}:</b> ${list.map(escapeHtml).join('، ')}</li>`).join('')}
             </ul>
         </div>`;
@@ -1485,7 +1505,7 @@ function renderScheduler() {
       <div class="bg-orange-500 rounded-2xl p-6 text-white mb-6 shadow-md flex justify-between items-center flex-wrap gap-4">
         <div>
            <h2 class="text-2xl font-bold mb-2">ساخت هوشمند برنامه کلاسی</h2>
-           <p class="text-orange-100 text-sm">این بخش با استفاده از الگوریتم پیشرفته، تداخل اساتید و زمان‌های آزادشان، فشردگی روزانه و دروس مشترک را بررسی می‌کند و بهترین برنامه را پیشنهاد می‌دهد.</p>
+           <p class="text-orange-100 text-sm">این بخش با استفاده از الگوریتم پیشرفته Simulated Annealing، بهترین برنامه را با رعایت قطعی حضور اساتید و سایر ترجیحات پیشنهاد می‌دهد.</p>
         </div>
         <button id="run-scheduler-btn" onclick="runSmartScheduler()" class="bg-white text-orange-600 hover:bg-orange-50 font-bold px-6 py-3 rounded-xl shadow transition-colors flex items-center gap-2">
            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
@@ -1524,7 +1544,6 @@ function runSmartScheduler() {
     if(runBtn) { runBtn.disabled = true; runBtn.innerText = 'در حال آماده‌سازی...'; }
 
     let lessonsToPlace = [];
-    let jointIdMap = {};
 
     state.classes.forEach(c => {
         const pCount = c.config?.periodsCount || 5;
@@ -1752,6 +1771,7 @@ function runSmartScheduler() {
         return copy;
     }
 
+    // Smart greedy constraint-satisfaction initializer
     function randomInitSchedule() {
         const sched = {};
         allClassIds.forEach(cid => {
@@ -1759,8 +1779,9 @@ function runSmartScheduler() {
             for(let d=0; d<6; d++) sched[cid][d] = new Array(MAX_PERIODS).fill(null);
         });
 
-        const singleLessons = [];
         const jointGroupsObj = {};
+        const singleLessons = [];
+        
         lessonsToPlace.forEach(l => {
             if (l.jointId) {
                 if (!jointGroupsObj[l.jointId]) jointGroupsObj[l.jointId] = [];
@@ -1769,76 +1790,87 @@ function runSmartScheduler() {
                 singleLessons.push(l);
             }
         });
+        
+        function isTeacherFree(teacherId, d, p) {
+            if (!teacherId) return true;
+            const avail = teacherAvail[teacherId];
+            if (avail && (!avail[d] || avail[d][p] === false)) return false; // Hard constraint: Availability
+            for (let cid of classIds) {
+                const l = sched[cid][d][p];
+                if (l && l.teacherId === teacherId) return false; // Hard constraint: Clash
+            }
+            return true;
+        }
 
         for (const jId in jointGroupsObj) {
             const group = jointGroupsObj[jId];
             const cIds = [...new Set(group.map(l => l.classId))];
             const periodsCount = group.length / cIds.length;
             
-            const validSlots = [];
-            for (let d = 0; d < 6; d++) {
-                for (let p = 0; p < MAX_PERIODS; p++) {
-                    let isValid = true;
-                    for (let cid of cIds) {
-                        const meta = classMeta[cid];
-                        if (!meta.activeDays.includes(d) || p >= meta.pCount || sched[cid][d][p]) {
-                            isValid = false; break;
+            for (let i = 0; i < periodsCount; i++) {
+                const lessonToPlace = group[i * cIds.length]; 
+                const teacherId = lessonToPlace.teacherId;
+                
+                let bestSlots = [];
+                let fallbackSlots = []; 
+
+                for (let d = 0; d < 6; d++) {
+                    for (let p = 0; p < MAX_PERIODS; p++) {
+                        let isClassValid = true;
+                        for (let cid of cIds) {
+                            const meta = classMeta[cid];
+                            if (!meta.activeDays.includes(d) || p >= meta.pCount || sched[cid][d][p]) {
+                                isClassValid = false; break;
+                            }
+                        }
+                        if (isClassValid) {
+                            if (isTeacherFree(teacherId, d, p)) bestSlots.push([d, p]);
+                            else fallbackSlots.push([d, p]);
                         }
                     }
-                    if (isValid) validSlots.push([d, p]);
                 }
-            }
-            
-            for (let i = validSlots.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [validSlots[i], validSlots[j]] = [validSlots[j], validSlots[i]];
-            }
-            
-            for (let i = 0; i < periodsCount; i++) {
-                if (validSlots.length > 0) {
-                    const [d, p] = validSlots.pop();
+                
+                let chosenSlot = null;
+                if (bestSlots.length > 0) chosenSlot = bestSlots[Math.floor(Math.random() * bestSlots.length)];
+                else if (fallbackSlots.length > 0) chosenSlot = fallbackSlots[Math.floor(Math.random() * fallbackSlots.length)];
+
+                if (chosenSlot) {
+                    const [d, p] = chosenSlot;
                     for (let k = 0; k < cIds.length; k++) {
                         sched[cIds[k]][d][p] = group[i * cIds.length + k];
-                    }
-                } else {
-                    for (let k = 0; k < cIds.length; k++) {
-                       let placed = false;
-                       const meta = classMeta[cIds[k]];
-                       for (let d of meta.activeDays) {
-                           for (let p = 0; p < meta.pCount; p++) {
-                               if (!sched[cIds[k]][d][p]) {
-                                   sched[cIds[k]][d][p] = group[i * cIds.length + k];
-                                   placed = true; break;
-                               }
-                           }
-                           if(placed) break;
-                       }
                     }
                 }
             }
         }
 
-        const slotsByClass = {};
-        classIds.forEach(cid => {
+        singleLessons.sort((a, b) => (b.isDouble ? 1 : 0) - (a.isDouble ? 1 : 0));
+        singleLessons.forEach(lesson => {
+            const cid = lesson.classId;
             const meta = classMeta[cid];
-            let slots = [];
-            meta.activeDays.forEach(d => { 
-                for(let p=0; p<meta.pCount; p++) if (!sched[cid][d][p]) slots.push([d, p]); 
+            const teacherId = lesson.teacherId;
+            
+            let bestSlots = [];
+            let fallbackSlots = [];
+            
+            meta.activeDays.forEach(d => {
+                for(let p = 0; p < meta.pCount; p++) {
+                    if (!sched[cid][d][p]) {
+                        if (isTeacherFree(teacherId, d, p)) bestSlots.push([d, p]);
+                        else fallbackSlots.push([d, p]);
+                    }
+                }
             });
-            for (let i = slots.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [slots[i], slots[j]] = [slots[j], slots[i]];
+            
+            let chosenSlot = null;
+            if (bestSlots.length > 0) chosenSlot = bestSlots[Math.floor(Math.random() * bestSlots.length)];
+            else if (fallbackSlots.length > 0) chosenSlot = fallbackSlots[Math.floor(Math.random() * fallbackSlots.length)];
+            
+            if (chosenSlot) {
+                const [d, p] = chosenSlot;
+                sched[cid][d][p] = lesson;
             }
-            slotsByClass[cid] = slots;
         });
 
-        singleLessons.forEach(lesson => {
-            const slots = slotsByClass[lesson.classId];
-            if (slots && slots.length > 0) {
-                const [d, p] = slots.pop();
-                sched[lesson.classId][d][p] = lesson;
-            }
-        });
         return sched;
     }
 
@@ -1984,36 +2016,18 @@ function runSmartScheduler() {
         }
     }
 
-    function reportResults() {
+    function reportResults(finishedRun) {
         const stats = { energy: 0, preferred: 0, heavy: 0, adjacent: 0, spread: 0, unpaired: 0, gaps: 0 };
-        let clashes = 0, unavailable = 0;
-        const sched = run.bestSchedule;
+        const sched = finishedRun.bestSchedule;
         for (let d = 0; d < 6; d++) {
-            for (let p = 0; p < MAX_PERIODS; p++) {
-                const counts = {};
-                const seenJoint = {};
-                for (let i = 0; i < classIds.length; i++) {
-                    const lesson = sched[classIds[i]][d][p];
-                    if (!lesson || !lesson.teacherId) continue;
-                    if (lesson.jointId) {
-                        if (seenJoint[lesson.jointId]) continue;
-                        seenJoint[lesson.jointId] = true;
-                    }
-                    const avail = teacherAvail[lesson.teacherId];
-                    if (!avail) continue;
-                    counts[lesson.teacherId] = (counts[lesson.teacherId] || 0) + 1;
-                    if (!avail[d] || avail[d][p] === false) unavailable++;
-                }
-                for (const tid in counts) if (counts[tid] > 1) clashes += counts[tid] - 1;
-            }
             teacherDayGapCost(sched, d, stats);
         }
         for (let i = 0; i < classIds.length; i++) classLocalCost(sched, classIds[i], stats);
 
         const hard = [], soft = [];
         if (droppedCount > 0) hard.push(`${droppedCount} زنگ به دلیل کمبود ظرفیت کلاس‌ها جایگذاری نشد`);
-        if (clashes > 0) hard.push(`${clashes} تداخل اساتید`);
-        if (unavailable > 0) hard.push(`${unavailable} زنگ خارج از زمان آزاد استاد`);
+        if (finishedRun.droppedCountPost > 0) hard.push(`${finishedRun.droppedCountPost} زنگ به دلیل تداخل اساتید یا نبود وقت آزاد از برنامه کاملاً حذف شدند (خالی ماندند)`);
+
         if (stats.unpaired > 0) soft.push(`${stats.unpaired} زنگ پیوستهٔ بی‌جفت`);
         if (stats.spread > 0) soft.push(`${stats.spread} مورد تجمع غیرمجاز یک درس در یک روز`);
         if (stats.adjacent > 0) soft.push(`${stats.adjacent} مورد تکرار پشت‌سرهم یک درس`);
@@ -2025,7 +2039,7 @@ function runSmartScheduler() {
         if (hard.length === 0 && soft.length === 0) {
             showToast('برنامه با موفقیت و بدون هیچ تداخل یا ایرادی ساخته شد!', 'success');
         } else if (hard.length > 0) {
-            showToast(`برنامه ساخته شد اما این مشکلات باقی ماند: ${hard.concat(soft).join('، ')}`, 'error');
+            showToast(`برنامه ساخته شد اما برخی دروس حذف شدند: ${hard.join('، ')}`, 'error');
         } else {
             showToast(`برنامه ساخته شد؛ موارد قابل بهبود: ${soft.join('، ')}`, 'info');
         }
@@ -2044,13 +2058,59 @@ function runSmartScheduler() {
             }
 
             if (run.restartIndex >= run.restarts) {
-                state.schedules = run.bestSchedule;
+                // Post-process to rigorously enforce Hard Constraints (Strict Availability)
+                const finalSched = run.bestSchedule;
+                let droppedCountPost = 0;
+                
+                for (let d = 0; d < 6; d++) {
+                    for (let p = 0; p < MAX_PERIODS; p++) {
+                        const seenTeacher = {};
+                        const toRemove = []; 
+                        
+                        for (let cid of classIds) {
+                            const lesson = finalSched[cid][d][p];
+                            if (!lesson || !lesson.teacherId) continue;
+                            
+                            const tid = lesson.teacherId;
+                            const avail = teacherAvail[tid];
+                            // STRICT: Remove if teacher is unavailable
+                            const isUnavailable = avail && (!avail[d] || avail[d][p] === false);
+                            
+                            // STRICT: Remove if teacher is double-booked
+                            let isClash = false;
+                            if (seenTeacher[tid]) {
+                                if (!lesson.jointId || seenTeacher[tid] !== lesson.jointId) isClash = true;
+                            }
+                            
+                            if (isUnavailable || isClash) toRemove.push({cid, d, p, jointId: lesson.jointId});
+                            else seenTeacher[tid] = lesson.jointId || true;
+                        }
+                        
+                        // Cascade removal for joint lessons
+                        const jointIdsToRemove = toRemove.map(r => r.jointId).filter(j => j);
+                        for (let cid of classIds) {
+                            const lesson = finalSched[cid][d][p];
+                            if (lesson && lesson.jointId && jointIdsToRemove.includes(lesson.jointId)) {
+                                if (!toRemove.some(r => r.cid === cid)) toRemove.push({cid, d, p});
+                            }
+                        }
+                        
+                        toRemove.forEach(r => {
+                            finalSched[r.cid][r.d][r.p] = null;
+                            droppedCountPost++;
+                        });
+                    }
+                }
+
+                run.droppedCountPost = droppedCountPost;
+                state.schedules = finalSched;
                 saveState();
                 const resultsEl = document.getElementById('schedule-results');
                 if (resultsEl) resultsEl.innerHTML = renderScheduleTables();
                 if (runBtn && runBtn.isConnected) { runBtn.disabled = false; runBtn.innerText = 'اجرا زمان‌بندی هوشمند'; }
+                const activeRunTemp = run;
                 activeSchedulerRun = null;
-                reportResults();
+                reportResults(activeRunTemp);
                 return;
             }
 
@@ -2074,10 +2134,10 @@ function renderScheduleTables() {
     if(!state.schedules || Object.keys(state.schedules).length === 0) return `<div class="text-center text-gray-400 py-10 border-2 border-dashed rounded-xl">هنوز برنامه‌ای ساخته نشده است. روی دکمه بالا کلیک کنید.</div>`;
 
     let html = `<div class="flex flex-wrap gap-2 mb-4 justify-end">
-        <button onclick="exportSchedule('pdf')" class="bg-red-50 text-red-600 px-4 py-2 rounded font-bold border border-red-200 text-sm">خروجی PDF</button>
-        <button onclick="exportSchedule('word')" class="bg-blue-50 text-blue-600 px-4 py-2 rounded font-bold border border-blue-200 text-sm">خروجی Word</button>
-        <button onclick="exportSchedule('excel')" class="bg-green-50 text-green-600 px-4 py-2 rounded font-bold border border-green-200 text-sm">خروجی Excel</button>
-    </div><div id="print-area" class="space-y-8 bg-white p-4 rounded">`;
+        <button onclick="exportSchedule('pdf')" class="bg-red-50 text-red-600 hover:bg-red-100 transition-colors px-4 py-2 rounded-xl font-bold border border-red-200 text-sm shadow-sm">خروجی PDF</button>
+        <button onclick="exportSchedule('word')" class="bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors px-4 py-2 rounded-xl font-bold border border-blue-200 text-sm shadow-sm">خروجی Word</button>
+        <button onclick="exportSchedule('excel')" class="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors px-4 py-2 rounded-xl font-bold border border-emerald-200 text-sm shadow-sm">خروجی Excel</button>
+    </div><div id="print-area" class="space-y-8 bg-white p-4 rounded-2xl shadow-sm">`;
 
     state.classes.forEach(cls => {
         const sched = state.schedules[cls.id];
@@ -2103,10 +2163,10 @@ function renderScheduleTables() {
                                 const lesson = sched[dIdx] && sched[dIdx][pIdx];
                                 if(!lesson) return `<td class="p-3 border-l border-slate-200 text-gray-300 text-xs">- خالی -</td>`;
                                 const teacherName = state.teachers.find(t=>t.id===lesson.teacherId)?.name || 'بدون استاد';
-                                const jointBadge = lesson.jointId ? `<div class="text-[9px] text-purple-600 bg-purple-50 inline-block px-1 rounded border border-purple-100 mt-1">مشترک</div>` : '';
+                                const jointBadge = lesson.jointId ? `<div class="text-[9px] text-purple-600 bg-purple-50 inline-block px-1 rounded border border-purple-100 mt-1 font-medium">مشترک</div>` : '';
                                 return `<td class="p-3 border-l border-slate-200">
                                     <div class="font-bold text-slate-800">${escapeHtml(lesson.name)}</div>
-                                    <div class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(teacherName)}</div>
+                                    <div class="text-[11px] text-slate-500 mt-0.5 font-medium">${escapeHtml(teacherName)}</div>
                                     ${jointBadge}
                                 </td>`;
                             }).join('')}
@@ -2149,7 +2209,6 @@ function exportSchedule(type) {
     }
 }
 
-// SETTINGS VIEW
 function renderSettings() {
   return `
     <div class="fade-in max-w-2xl mx-auto">
@@ -2158,16 +2217,18 @@ function renderSettings() {
         <div>
           <label class="block text-sm font-bold text-slate-700 mb-2">نام مدرسه</label>
           <div class="flex gap-2">
-            <input type="text" id="setting_school_name" value="${escapeHtml(state.settings.schoolName || '')}" class="flex-1 border rounded-xl px-4 py-2 outline-none focus:border-gray-500" maxlength="100">
-            <button onclick="saveSettings()" class="bg-gray-800 text-white px-6 py-2 rounded-xl font-semibold hover:bg-gray-700 transition-colors">ذخیره</button>
+            <input type="text" id="setting_school_name" value="${escapeHtml(state.settings.schoolName || '')}" class="flex-1 border border-slate-300 rounded-xl px-4 py-2 outline-none focus:border-gray-500 transition-colors shadow-sm" maxlength="100">
+            <button onclick="saveSettings()" class="bg-gray-800 text-white px-6 py-2 rounded-xl font-semibold hover:bg-gray-700 transition-colors shadow-sm">ذخیره</button>
           </div>
         </div>
         <hr class="border-slate-100">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <button onclick="exportData()" class="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-blue-200 rounded-xl hover:bg-blue-50 text-blue-700 transition-colors">
+          <button onclick="exportData()" class="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-blue-200 rounded-xl hover:bg-blue-50 text-blue-700 transition-colors cursor-pointer group">
+             <svg class="w-8 h-8 text-blue-400 group-hover:text-blue-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
              <span class="font-bold">دریافت فایل پشتیبان (JSON)</span>
           </button>
-          <label class="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-emerald-200 rounded-xl hover:bg-emerald-50 text-emerald-700 transition-colors cursor-pointer">
+          <label class="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-emerald-200 rounded-xl hover:bg-emerald-50 text-emerald-700 transition-colors cursor-pointer group">
+             <svg class="w-8 h-8 text-emerald-400 group-hover:text-emerald-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
              <span class="font-bold">بازیابی اطلاعات (JSON)</span>
              <input type="file" class="hidden" accept=".json" onchange="importData(event)">
           </label>
@@ -2221,19 +2282,19 @@ function importData(e) {
   reader.onerror = function() { showToast('خطا در خواندن فایل', 'error'); };
   reader.readAsText(file);
 }
+
 function resetAllData() {
-  if(confirm('تمام اطلاعات پاک خواهد شد. آیا مطمئنید؟')) {
+  showConfirm('تمامی اطلاعات مدرسه، کلاس‌ها، اساتید و برنامه‌ها به صورت غیرقابل بازگشت پاک خواهند شد. آیا کاملاً مطمئن هستید؟', () => {
       localStorage.removeItem('school_data');
       location.reload();
-  }
+  });
 }
 
-// --- INIT ---
+// INIT
 window.onload = () => {
   loadState();
   navigateTo('home');
 };
 </script>
 </body>
- 
 </html>
