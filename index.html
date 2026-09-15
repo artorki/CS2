@@ -1423,7 +1423,7 @@ function addSubjectToClass(classId) {
 }
 
 
-function deleteSharedGroup(groupId) {
+function deleteSharedGroup(groupId, returnClassId = '') {
   if (!confirm('آیا از حذف گروه برگزاری مشترک اطمینان دارید؟')) return;
   const group = (state.sharedGroups || []).find(g => g.id === groupId);
   if (group) {
@@ -1435,7 +1435,9 @@ function deleteSharedGroup(groupId) {
   }
   state.sharedGroups = (state.sharedGroups || []).filter(g => g.id !== groupId);
   saveState();
-  navigateTo('classes');
+  // FIX (باگ): قبلاً همیشه به لیست کلاس‌ها می‌رفت؛ حالا در صورت وجود، به همان صفحهٔ ویرایش کلاس برمی‌گردد.
+  const cls = returnClassId && state.classes.find(c => c.id === returnClassId);
+  navigateTo(cls ? `class_edit_${returnClassId}` : 'classes');
   showToast('گروه برگزاری مشترک حذف شد.', 'success');
 }
 
@@ -1498,7 +1500,7 @@ function openSharedLessonModal(classId, subIndex = null) {
     </div>`;
 
   const footer = `<button onclick="hideModal()" class="px-4 py-2 bg-gray-100 rounded-xl">انصراف</button>
-    ${currentGroup ? `<button onclick="deleteSharedGroup('${escapeHtml(currentGroup.id)}'); hideModal();" class="px-4 py-2 bg-red-50 text-red-600 rounded-xl">حذف گروه</button>` : ''}
+    ${currentGroup ? `<button onclick="deleteSharedGroup('${escapeHtml(currentGroup.id)}', '${escapeHtml(classId)}'); hideModal();" class="px-4 py-2 bg-red-50 text-red-600 rounded-xl">حذف گروه</button>` : ''}
     <button onclick="saveSharedLessonGroup('${escapeHtml(classId)}','${escapeHtml(currentSub?.subjectId || '')}','${escapeHtml(currentGroup?.id || '')}')" class="px-5 py-2 bg-violet-600 text-white rounded-xl">ذخیره برگزاری مشترک</button>`;
   showModal('تنظیم برگزاری مشترک', body, footer);
 }
@@ -1686,6 +1688,8 @@ let activeSchedulerRun = null; // جلوگیری از اجرای همزمان د
 
 function runSmartScheduler() {
   if (activeSchedulerRun) return showToast('زمان‌بندی دیگری در حال اجراست؛ چند لحظه صبر کنید.', 'info');
+  // FIX (باگ): این متغیر قفل هرگز true نمی‌شد، بنابراین اجرای هم‌زمان دوباره را واقعاً مسدود نمی‌کرد.
+  activeSchedulerRun = true;
 
   window.lastScheduleDiagnostics = { impossible: [] };
   const runBtn = document.getElementById('run-scheduler-btn');
@@ -1797,6 +1801,7 @@ function runSmartScheduler() {
     const el = document.getElementById('schedule-results');
     if (el) el.innerHTML = renderScheduleTables();
     if (runBtn) { runBtn.disabled = false; runBtn.innerText = 'اجرای زمان‌بندی هوشمند'; }
+    activeSchedulerRun = null;
     showToast('هیچ درسی برای زمان‌بندی وجود ندارد.', 'info');
     return;
   }
