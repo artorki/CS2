@@ -159,6 +159,65 @@ function showToast(msg, type = 'info') {
 }
 
 /* STREAMING_CHUNK:Loading and Validating State... */
+function normalizeTeacherAvailability(raw) {
+    const DAYS = CONSTANTS.DAYS;
+    const SLOT_COUNT = CONSTANTS.MAX_PERIODS;
+    const result = Array.from({length: 6}, () => Array(SLOT_COUNT).fill(true));
+
+    // Native/internal format: availability[dayIndex][slotIndex]
+    if (Array.isArray(raw)) {
+        for (let d = 0; d < 6; d++) {
+            const row = Array.isArray(raw[d]) ? raw[d] : [];
+            if (row.length === 0) continue;
+            if (row.length >= SLOT_COUNT) {
+                result[d] = Array.from({length: SLOT_COUNT}, (_, p) => Boolean(row[p]));
+            } else if (row.length === 4) {
+                // Compatibility with a four-period source: each period occupies two internal slots.
+                for (let p = 0; p < 4; p++) {
+                    result[d][p * 2] = Boolean(row[p]);
+                    result[d][p * 2 + 1] = Boolean(row[p]);
+                }
+            } else {
+                for (let p = 0; p < Math.min(row.length, SLOT_COUNT); p++) result[d][p] = Boolean(row[p]);
+            }
+        }
+        return result;
+    }
+
+    // Compatibility format: { "0": [...], "1": [...], ... }
+    // or Persian day names such as { "شنبه": [...], "یکشنبه": [...] }.
+    if (raw && typeof raw === 'object') {
+        const aliases = {
+            'شنبه': 0,
+            'یکشنبه': 1, 'یک‌شنبه': 1,
+            'دوشنبه': 2,
+            'سهشنبه': 3, 'سه‌شنبه': 3,
+            'چهارشنبه': 4,
+            'پنجشنبه': 5, 'پنج‌شنبه': 5
+        };
+        Object.keys(raw).forEach(key => {
+            let d = null;
+            if (/^\d+$/.test(String(key))) d = Number(key);
+            else d = aliases[String(key).replace(/\s+/g, '')];
+            if (d === undefined || d === null || d < 0 || d >= 6) return;
+            const row = Array.isArray(raw[key]) ? raw[key] : [];
+            if (row.length >= SLOT_COUNT) {
+                result[d] = Array.from({length: SLOT_COUNT}, (_, p) => Boolean(row[p]));
+            } else if (row.length === 4) {
+                for (let p = 0; p < 4; p++) {
+                    result[d][p * 2] = Boolean(row[p]);
+                    result[d][p * 2 + 1] = Boolean(row[p]);
+                }
+            } else if (row.length) {
+                for (let p = 0; p < Math.min(row.length, SLOT_COUNT); p++) result[d][p] = Boolean(row[p]);
+            }
+        });
+        return result;
+    }
+
+    return result;
+}
+
 function loadState() {
     try {
         const saved = localStorage.getItem('school_data_pro');
@@ -178,16 +237,9 @@ function loadState() {
     state.teachers.forEach(t => {
         if (!t.name) t.name = 'استاد بدون نام';
         if (!Array.isArray(t.subjects)) t.subjects = [];
-        if (!Array.isArray(t.availability) || t.availability.length < 6) {
-            t.availability = Array.from({length: 6}, () => Array(CONSTANTS.MAX_PERIODS).fill(true));
-        } else {
-            for (let d = 0; d < 6; d++) {
-                if (!Array.isArray(t.availability[d]) || t.availability[d].length < CONSTANTS.MAX_PERIODS) {
-                    const row = Array.isArray(t.availability[d]) ? t.availability[d] : [];
-                    t.availability[d] = Array.from({length: CONSTANTS.MAX_PERIODS}, (_, i) => row[i] !== undefined ? Boolean(row[i]) : true);
-                }
-            }
-        }
+        // Always normalize imported availability before validation so Restore cannot
+        // silently replace valid teacher free-time data with an "all available" matrix.
+        t.availability = normalizeTeacherAvailability(t.availability);
     });
 
     if (!Array.isArray(state.classes)) state.classes = [];
@@ -2489,34 +2541,63 @@ function exportDataJSON() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'school_scheduler_backup.json'; a.click();
 }
 function importDataJSON(e) {
-    const f = e.target.files[0]; if(!f) return;
+    const f = e.target.files[0];
+    if (!f) return;
+
     const reader = new FileReader();
     reader.onload = ev => {
         try {
             const data = JSON.parse(ev.target.result);
-            if(data && Array.isArray(data.classes) && Array.isArray(data.subjects)) {
-                state = {
-                    settings: { schoolName: 'نام مدرسه خود را تنظیم کنید' },
-                    subjects: [],
-                    teachers: [],
-                    classes: [],
-                    linkedGroups: [],
-                    consecutiveRules: [],
-                    schedules: {},
-                    auditReport: null,
-                    ...data,
-                    settings: { schoolName: (data.settings && data.settings.schoolName) ? String(data.settings.schoolName).slice(0,100) : 'نام مدرسه خود را تنظیم کنید' },
-                    teachers: Array.isArray(data.teachers) ? data.teachers : [],
-                    linkedGroups: Array.isArray(data.linkedGroups) ? data.linkedGroups : [],
-                    consecutiveRules: Array.isArray(data.consecutiveRules) ? data.consecutiveRules : [],
-                    schedules: data.schedules && typeof data.schedules === 'object' ? data.schedules : {},
-                    auditReport: data.auditReport || null
-                };
-                localStorage.setItem('school_data_pro', JSON.stringify(state));
-                location.reload();
-            } else throw new Error("Invalid structure");
-        } catch(err) { showToast('فایل نامعتبر است.', 'error'); }
+            if (!data || !Array.isArray(data.classes) || !Array.isArray(data.subjects)) {
+                throw new Error('Invalid structure');
+            }
+
+            // Preserve the complete backup and only normalize fields that the application
+            // requires for safe operation. In particular, teacher availability is converted
+            // to the application's native 6 x MAX_PERIODS matrix instead of being discarded.
+            state = {
+                settings: { schoolName: 'نام مدرسه خود را تنظیم کنید' },
+                subjects: [],
+                teachers: [],
+                classes: [],
+                linkedGroups: [],
+                consecutiveRules: [],
+                schedules: {},
+                auditReport: null,
+                ...data
+            };
+
+            state.settings = {
+                ...(data.settings && typeof data.settings === 'object' ? data.settings : {}),
+                schoolName: (data.settings && data.settings.schoolName)
+                    ? String(data.settings.schoolName).slice(0, 100)
+                    : 'نام مدرسه خود را تنظیم کنید'
+            };
+
+            state.subjects = Array.isArray(data.subjects) ? data.subjects : [];
+            state.teachers = Array.isArray(data.teachers) ? data.teachers.map(t => ({
+                ...t,
+                name: t && t.name ? String(t.name) : 'استاد بدون نام',
+                subjects: Array.isArray(t && t.subjects) ? t.subjects : [],
+                availability: normalizeTeacherAvailability(t && t.availability)
+            })) : [];
+
+            state.classes = Array.isArray(data.classes) ? data.classes : [];
+            state.linkedGroups = Array.isArray(data.linkedGroups) ? data.linkedGroups : [];
+            state.consecutiveRules = Array.isArray(data.consecutiveRules) ? data.consecutiveRules : [];
+            state.schedules = data.schedules && typeof data.schedules === 'object' ? data.schedules : {};
+            state.auditReport = data.auditReport || null;
+
+            // Keep class/subject teacher links exactly as supplied by the backup.
+            // Do NOT run autoAssignTeachers here: doing so can overwrite explicit teacherId values.
+            localStorage.setItem('school_data_pro', JSON.stringify(state));
+            location.reload();
+        } catch (err) {
+            console.error('JSON Restore error:', err);
+            showToast('فایل JSON نامعتبر یا خراب است.', 'error');
+        }
     };
+    reader.onerror = () => showToast('خطا در خواندن فایل.', 'error');
     reader.readAsText(f);
 }
 function factoryReset() {
